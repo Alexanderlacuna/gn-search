@@ -365,15 +365,35 @@ match-set comparisons were graded. The two tests that need the inventory are
 gated on `#[cfg(not(feature = "xapian"))]`, which is why the target runs 7
 tests there and 9 by default.
 
-## How to widen it
+## How to widen it — the next step, and it is not a no-op
 
-The blockers are all "the fixture cannot answer this", so they disappear by
-construction when a real backend exists: implement `Index` over xapian and
-the same file grades clause (a) and clause (b) at full width (that is what
-GN4's own harness does). The runner needs no change for that — only a way to
-point `FIXTURE_PATH` at an index, which is deliberately not wired in while
-the only backend is a test double that refuses non-empty paths
-(`src/index/fixture.rs`, F1).
+The blockers above are all "the fixture double cannot answer this", so the
+*grading* widens by construction once a backend can answer a real index:
+implement `Index` over xapian and the same file can grade clause (a) and clause
+(b) at full width (that is what GN4's own harness does).
+
+**The runner does have to change for that, and this is the next step rather
+than a detail.** `FIXTURE_BACKEND` is `cfg!(not(feature = "xapian"))`
+(`tests/parity_corpus.rs:101`): it keys *can grade a match set* to the ABSENCE
+of the `xapian` feature. A real backend arrives with exactly that feature on, so
+the day it lands the const is `false`, every recorded-200 shape short-circuits
+to `SKIP(no-fixture-backend-under-this-feature)`, `corpus_report` asserts that
+0 graded, and the evidence floor stays off — the corpus would still grade 0 with
+a working index behind it. Two things must change together with the backend:
+
+1. **the inventory needs a real source behind the same `Index` trait** —
+   `fixture_inventory()` (one empty-path query answered by the in-memory
+   double) has to be replaced by a query the real backend answers. That
+   inventory is the document set every recorded match set is restricted to, so
+   without it there is nothing to compare and nothing to raise `MIN_GRADED`
+   against; and
+2. **the `FIXTURE_BACKEND` gate has to go**, so that "can this build grade?"
+   is answered by whether that inventory is reachable, not by which feature is
+   compiled in.
+
+`FIXTURE_PATH` (the empty index path) is the small version of the same point: it
+is deliberately not wired to a real path while the only backend is a test double
+that refuses non-empty paths (`src/index/fixture.rs`).
 
 ## Evidence that the runner bites
 

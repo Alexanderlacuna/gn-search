@@ -25,7 +25,7 @@ src/error.rs          SearchError: InvalidQuery / Unreachable / Misbehaving / Ba
 src/grammar.rs        the query grammar as DATA + a pure renderer (prefix, term, kind) — no xapian
 src/index/mod.rs      trait Index { open(path); search(&ParsedQuery, limit, page) } + the offset
 src/index/fixture.rs  in-memory index over the 5 recorded alcohol hits (empty path only)
-src/index/xapian.rs   STUB behind `--features xapian`: the three pre-checks, then unimplemented!
+src/index/xapian.rs   STUB behind `--features xapian`: the pre-checks, then unimplemented!
 src/manifest.rs       reads <index>.sidecar.json (v3, and the v4 build_id/built_at shape)
 src/bin/gn-search.rs  dev HTTP server behind `--features serve`: /search, /index, /healthz
 tests/                grammar render · hit round-trip · error-to-status table · manifest cases ·
@@ -101,11 +101,22 @@ cargo clippy --offline --all-targets   # 0 warnings; see docs/KNOWN-DEBT.md
 (they are GN4's pins), so `--offline` resolves with no network access and
 nothing vendored; no run needs an index directory, a database or a network.
 
+That gate block has two preconditions, and both are environmental rather than
+code: the toolchain is the pinned rustup `1.88.0` above (with its `bin` first on
+`PATH`), and `tests/parity_corpus.rs` reads the 54 recorded shapes from an
+**absolute** path into GN4's checkout — `DEFAULT_CORPUS =
+/home/kabui/project5/genenetwork4/test/data/parity-fixtures`
+(`tests/parity_corpus.rs:88`). On a machine where that tree is not reachable,
+point `GN4_PARITY_FIXTURES` at a copy (the same variable GN4's own harness
+honours) or the `parity_corpus` target panics with "no Q*.json fixtures in …",
+and the default gate is red out of the box.
+
 ### Expected results of that gate
 
 MEASURED on the delivered tree with `cargo 1.88.0` / `rustc 1.88.0`, every run
-`--offline`. Counts are `passed / failed` per target; every run exits 0 and
-`rustc` emits no warnings:
+`--offline`, the corpus at that `DEFAULT_CORPUS` path (see "Running the tests"
+above). Counts are `passed / failed` per target; every run exits 0 and `rustc`
+emits no warnings — on that toolchain, with that corpus:
 
 | target | `default` | `--features serve` | `--features xapian` | `--all-features` |
 |---|---|---|---|---|
