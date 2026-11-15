@@ -1,0 +1,36 @@
+# gn-search: the GeneNetwork search seam as a library crate.
+#
+# Sections implemented, per file, are named in each module's header; the
+# crate as a whole implements the seam of SYNTHESIS §3 (the `(index_path,
+# q, type, limit, page) -> Vec<SearchHit>` four-tuple GN4's `Engine` trait
+# forwards) over the grammar of SCOUT-NATIVE §3 and the hit shape of
+# SCOUT-NATIVE §4.
+#
+# The default build has no third-party dependency beyond serde/serde_json
+# (both pinned to the versions GN4's own Cargo.toml pins); the `xapian`
+# and `serve` features add no dependencies either, so the crate builds
+# offline.
+
+[package]
+name = "gn-search"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+description = "GeneNetwork search seam: query grammar, index trait and hit shape, so a search backend can be swapped behind one function"
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+
+[features]
+default = []
+# The xapian backend. Off by default because no Rust xapian binding is a
+# crates.io dependency: GN4 uses the `xapian_rs` fork (SCOUT-NATIVE §8).
+# With this feature on, `src/index/xapian.rs` is a stub that performs the
+# pre-checks and then stops.
+xapian = []
+# The development HTTP server in `src/bin/gn-search.rs`. Off by default so
+# the default build produces the library and nothing else; the server is
+# plain `std::net`, no axum/tokio.
+serve = []
