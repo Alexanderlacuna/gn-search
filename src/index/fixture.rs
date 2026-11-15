@@ -163,9 +163,10 @@ fn term_value(term: &RenderedTerm) -> &str {
 /// than a second copy of the prefix table, so the two cannot drift.
 fn boolean_matches(hit: &SearchHit, prefix: &str, value: &str) -> bool {
     match GRAMMAR.boolean_by_prefix(prefix).map(|entry| entry.field) {
-        Some("author") => hit.authors.as_ref().map_or(false, |authors| {
-            authors.iter().any(|a| a.to_lowercase() == value)
-        }),
+        Some("author") => hit
+            .authors
+            .as_ref()
+            .is_some_and(|authors| authors.iter().any(|a| a.to_lowercase() == value)),
         Some("species") => field_eq(hit.species.as_deref(), value),
         Some("group") => field_eq(hit.group.as_deref(), value),
         Some("dataset") => field_eq(hit.dataset.as_deref(), value),
@@ -238,13 +239,13 @@ fn slot_value(hit: &SearchHit, slot: u32) -> Option<f64> {
 /// Exact, case-insensitive comparison — boolean terms are stored lowercase
 /// (SCOUT-NATIVE §3), so the field is lowercased before comparing.
 fn field_eq(field: Option<&str>, value: &str) -> bool {
-    field.map_or(false, |text| text.to_lowercase() == value)
+    field.is_some_and(|text| text.to_lowercase() == value)
 }
 
 /// Case-insensitive substring test: the fixture's stand-in for stemming.
 fn field_contains(field: Option<&str>, value: &str) -> bool {
     let needle = value.to_lowercase();
-    field.map_or(false, |text| text.to_lowercase().contains(&needle))
+    field.is_some_and(|text| text.to_lowercase().contains(&needle))
 }
 
 /// The five recorded hits (module doc for provenance).

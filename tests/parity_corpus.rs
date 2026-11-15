@@ -861,9 +861,8 @@ fn corpus_report() {
         counts.failed
     );
     println!(
-        "exit rule: any FAIL fails the test, and so does fewer than MIN_GRADED = {} graded \
-         comparisons; PASS, VACUOUS and SKIP alone are not evidence\n",
-        MIN_GRADED
+        "exit rule: any FAIL fails the test, and so does fewer than MIN_GRADED = {MIN_GRADED} graded \
+         comparisons; PASS, VACUOUS and SKIP alone are not evidence\n"
     );
 
     let failed: Vec<&Row> = rows.iter().filter(|row| row.verdict.is_fail()).collect();

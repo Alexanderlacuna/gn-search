@@ -7,7 +7,7 @@
 //! fields ignored, and a manifest of a version this reader does not know is
 //! treated as absent rather than guessed at.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use gn_search::manifest::{self, MANIFEST_VERSION_V3, MANIFEST_VERSION_V4};
 use gn_search::SearchError;
@@ -23,12 +23,12 @@ fn scratch_index(name: &str) -> PathBuf {
 }
 
 /// Write `manifest_json` as the sidecar of `index_path`.
-fn write_sidecar(index_path: &PathBuf, manifest_json: &str) {
+fn write_sidecar(index_path: &Path, manifest_json: &str) {
     let path = manifest::sidecar_path(index_path.to_str().expect("utf-8 temp path"));
     std::fs::write(&path, manifest_json).expect("write the sidecar");
 }
 
-fn read(index_path: &PathBuf) -> Option<gn_search::manifest::Manifest> {
+fn read(index_path: &Path) -> Option<gn_search::manifest::Manifest> {
     manifest::read(index_path.to_str().expect("utf-8 temp path"))
         .expect("reading a well-formed sidecar cannot fail")
 }

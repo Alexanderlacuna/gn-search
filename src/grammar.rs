@@ -656,16 +656,13 @@ impl Grammar {
                         }
                     }
                     if self.is_position_field(field) {
-                        let (begin, end) = match parse_position(value, &self.position) {
-                            Some(bounds) => bounds,
-                            // An unparseable position declines to a range with
-                            // no bounds, which every backend reads as "match
-                            // nothing": gn3's escaped `ValueError` is not a
-                            // contract, and GN4's blessed behaviour for the
-                            // class is a 200 with no hits (SCOUT-NATIVE §3,
-                            // §6 — the parity-metric amendment).
-                            None => (None, None),
-                        };
+                        // An unparseable position declines to a range with no
+                        // bounds, which every backend reads as "match nothing":
+                        // gn3's escaped `ValueError` is not a contract, and GN4's
+                        // blessed behaviour for the class is a 200 with no hits
+                        // (SCOUT-NATIVE §3, §6 — the parity-metric amendment).
+                        let (begin, end) =
+                            parse_position(value, &self.position).unwrap_or_default();
                         terms.push(RenderedTerm {
                             prefix: format!("{field}:"),
                             term: value.to_string(),
@@ -855,6 +852,14 @@ fn text_words(token: &str, phrase: bool) -> Vec<RenderedTerm> {
 /// unquoted values containing `..`, stopping the value at a quote;
 /// `native.rs:722-725` asserts the `mean:5` case). Both sides open (`..`) is
 /// the both-empty range, which matches nothing.
+//
+// `clippy::type_complexity`: the nesting IS the return contract — `None` is
+// "not a range", `Some((None, None))` is "a range with both sides open", and a
+// `type` alias would rename that without making it any easier to read. The
+// honest fix is a named bounds struct, which would change `parse_range` and
+// `parse_position` together; that is a refactor of the rendering seam, not a
+// lint fix, so it is recorded in `docs/KNOWN-DEBT.md` instead.
+#[allow(clippy::type_complexity)]
 fn parse_range(
     field: &str,
     value: &str,

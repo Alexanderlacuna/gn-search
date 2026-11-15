@@ -83,11 +83,9 @@ impl fmt::Display for SearchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidQuery {
-                xapian_error_type, ..
-            } => match xapian_error_type {
-                Some(error_type) => write!(f, "{} ({error_type})", self.message()),
-                None => write!(f, "{}", self.message()),
-            },
+                xapian_error_type: Some(error_type),
+                ..
+            } => write!(f, "{} ({error_type})", self.message()),
             _ => write!(f, "{}", self.message()),
         }
     }

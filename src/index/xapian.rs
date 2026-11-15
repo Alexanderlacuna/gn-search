@@ -25,7 +25,10 @@
 //! The messages below are GN4's, verbatim, because they are what operators
 //! already see in a 500/502 body; the `postlist.glass` check is not GN4's and
 //! says so.
-#![cfg(feature = "xapian")]
+//!
+//! The module is gated once, by `#[cfg(feature = "xapian")]` on its
+//! declaration (`src/index/mod.rs`); a second `#![cfg(...)]` here was
+//! redundant and clippy flags it as a duplicated attribute.
 
 use crate::grammar::ParsedQuery;
 use crate::hit::SearchHit;
