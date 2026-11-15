@@ -236,6 +236,14 @@ and no mention of `parity_corpus`'s 9. `docs/WORKER-BLOCKERS.md` §8.5 says gram
 A runner using this table to distinguish "not run" from "failed" concludes five tests vanished. *Smallest fix:*
 paste the measured table (`32 · 0 · 4 · 26 · 6 · 7 · 9 = 84`) and delete the rustc-harness section.
 
+> **`[CORRECTED 2026-11-15]`** — fixed in the tree this reads. `README.md` has no "Not with `cargo`"
+> section any more; "Running the tests" is the gate block itself, and "Expected results of that gate"
+> (`README.md:114-131`) is the measured per-target table — `32 · 0 · 4 · 26 · 6 · 7 · 9 = 84` in the
+> default column, plus the `serve`, `xapian` and `all-features` columns — and it now names its two
+> preconditions (the pinned `1.88.0` toolchain, and the corpus at `DEFAULT_CORPUS` or
+> `GN4_PARITY_FIXTURES`; `VERIFY-REMAINING.md` F6). `docs/WORKER-BLOCKERS.md` §8.5 carries its own
+> correction. The stale counts above stay as the record of what F4 was.
+
 **F5 — `nit`, dev-server comment vs code.** `src/bin/gn-search.rs:164` (`type` defaults to `phenotype`, never
 validated) under a comment saying "Parameter validation mirrors the bounds GN4's route applies". Verified live:
 `?query=alcohol&type=banana` → `200 []`, where GN4 answers `400 invalid_parameter`. Deliberately out of the
@@ -259,6 +267,15 @@ contradiction); the fixture's refusal of a non-empty path in the default build; 
 regression), and all three blockers are real fixes at the named lines rather than prose. What keeps this off a
 clean PASS: a documented gate (`--features xapian`) is red in seven tests while two docs say it is green or
 nearly so (F1), and the runner's strongest "Proved" sentence is one I could falsify in ten minutes (F2).
+
+> **`[CORRECTED 2026-11-15]`** — the first of those two reasons is gone: `cargo test --offline --features
+> xapian` is **exit 0, 88 / 0** (`unittests src/lib.rs` 38 / 0, `tests/parity_corpus.rs` 7 / 0, every other
+> target unchanged) and `--all-features` is the same 88 / 0, so the documented gate is literally true — by
+> the change recommended just below: the `crate::search` half of `src/index/fixture.rs`'s test is
+> `#[cfg(not(feature = "xapian"))]` and those six `grammar_render` tests assert `GRAMMAR.render(q).is_ok()`.
+> The second (F2's overclaim) is corrected in place above. What survives the fix, and is now said plainly in
+> `README.md` and `docs/CORPUS-RUNNER.md`: `88 / 0` under the feature is *less* evidence than the default
+> `84 / 0` — 0 match-set comparisons, and the `MIN_GRADED` floor not applied.
 
 **If this crate were mine, the single next action:** make the documented gate literally true — gate
 `fixture.rs:391` on `#[cfg(not(feature = "xapian"))]` and switch the six `.is_ok()` assertions in
