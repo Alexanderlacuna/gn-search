@@ -5,23 +5,27 @@
 //! from the document's stored JSON) and §5 (the retrieval contract: `page`
 //! shifts the offset, and the FULL match set comes back).
 //!
-//! The trait is as narrow as GN4's engine seam (SYNTHESIS §3): open by
-//! path, ask for the match set from one offset. Everything about ranking,
-//! sorting, enrichment and the response envelope stays above it.
+//! This trait is the FIXTURE BACKEND's interface, not the production one.
+//! Production goes through [`crate::search`] into [`crate::native`], which
+//! opens the index with the pre-checks its binding needs (the xapian
+//! `Database::open` aborts the process instead of returning an error, so
+//! every reachable failure must be an error before the call —
+//! `native::open_database`). The fixture is an in-memory test double
+//! behind the non-default `fixture` feature; it implements this trait so
+//! the parity corpus runner and the crate's tests can ask for a match set
+//! without an index directory.
 //!
 //! `open` is a static method returning `Self`, so the trait is not
 //! object-safe; that is deliberate — a backend is chosen at build or
 //! config time, not dispatched through a `dyn` handle, and the concrete
-//! type keeps the xapian stub's pre-checks out of a vtable.
+//! type keeps the fixture's construction out of a vtable.
 
 use crate::grammar::ParsedQuery;
 use crate::hit::SearchHit;
 use crate::SearchError;
 
+#[cfg(feature = "fixture")]
 pub mod fixture;
-
-#[cfg(feature = "xapian")]
-pub mod xapian;
 
 /// A searchable index.
 pub trait Index: Sized {
@@ -74,7 +78,9 @@ pub fn offset_for_page(limit: u64, page: u64) -> u64 {
 
 /// A count as a `usize`, saturating rather than wrapping on a 32-bit
 /// target (`limit` comes from a query parameter and is only capped
-/// upstream).
+/// upstream). Only the fixture backend counts anything; the engine hands
+/// its counts to xapian.
+#[cfg(feature = "fixture")]
 pub(crate) fn to_usize(count: u64) -> usize {
     usize::try_from(count).unwrap_or(usize::MAX)
 }

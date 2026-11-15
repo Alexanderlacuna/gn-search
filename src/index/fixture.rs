@@ -7,13 +7,15 @@
 //!
 //! # This is a test double, and it refuses to be anything else
 //!
-//! [`FixtureIndex::open`] answers an EMPTY path and nothing else. A build
-//! compiled without `--features xapian` has no index reader at all, and a
-//! backend that accepted `/var/genenetwork/xapian` and answered it with the
-//! five recorded alcohol phenotypes below would fabricate search results —
-//! silent, plausible, wrong data, wrapped by the route in a perfectly good
-//! envelope. So a non-empty path is an [`SearchError::Internal`] naming the
-//! missing feature, never a hit set.
+//! [`FixtureIndex::open`] answers an EMPTY path and nothing else. It is
+//! compiled only under `--features fixture`, and it is not on
+//! [`crate::search`]'s path: production opens the xapian index the engine
+//! is given ([`crate::native`]). A double that accepted
+//! `/var/genenetwork/xapian` and answered it with the five recorded alcohol
+//! phenotypes below would fabricate search results — silent, plausible,
+//! wrong data, wrapped by the route in a perfectly good envelope. So a
+//! non-empty path is an [`SearchError::Internal`] naming the feature, never
+//! a hit set.
 //!
 //! The five documents are the recorded production response for
 //! `q=alcohol&type=phenotype` (GN4 `test/data/search_alcohol_phenotype.json`,
@@ -95,9 +97,9 @@ impl Index for FixtureIndex {
     fn open(path: &str) -> Result<Self, SearchError> {
         if !path.is_empty() {
             return Err(SearchError::Internal(format!(
-                "no search backend is compiled into this build, so the index at {path} cannot \
-                 be opened; rebuild with --features xapian for the xapian backend. The \
-                 in-memory fixture answers only an empty index path, and only in tests"
+                "the in-memory fixture answers only an empty index path, and only in tests; the \
+                 index at {path} must be opened by the xapian engine (build with --features \
+                 fixture for the double, and pass an empty path)"
             )));
         }
         Ok(Self {
@@ -378,28 +380,37 @@ mod tests {
         match FixtureIndex::open("/var/genenetwork/xapian") {
             Err(SearchError::Internal(message)) => {
                 assert!(
-                    message.contains("no search backend is compiled into this build"),
-                    "the error must name the missing backend, got {message:?}"
+                    message.contains("answers only an empty index path"),
+                    "the error must name what the double answers, got {message:?}"
                 );
                 assert!(
-                    message.contains("--features xapian"),
-                    "the error must name the missing feature, got {message:?}"
+                    message.contains("--features fixture"),
+                    "the error must name the feature, got {message:?}"
                 );
             }
             other => panic!("expected Internal, got {:?}", other.map(|_| "an index")),
         }
-        // And through the path a caller actually takes — but only in a build
-        // where the fixture IS the backend. With `xapian` compiled in, this
-        // path reaches the stub instead, and its refusal (`XAPIAN_DB_PATH is
-        // not configured`) is that module's contract, not this one.
-        #[cfg(not(feature = "xapian"))]
+        // And through the path a caller actually takes: the engine, never the
+        // fixture. An unset path is the moved engine's `Internal` (naming
+        // `XAPIAN_DB_PATH`) and a path that is not there is `Unreachable` —
+        // neither yields the five recorded hits.
+        match crate::search("", "alcohol", "phenotype", 20, 1) {
+            Err(SearchError::Internal(message)) => assert!(
+                message.contains("XAPIAN_DB_PATH is not configured"),
+                "an unset index path must name the config key, got {message:?}"
+            ),
+            other => panic!(
+                "an unset index path must be Internal, got {:?}",
+                other.map(|hits| hits.len())
+            ),
+        }
         match crate::search("/var/genenetwork/xapian", "alcohol", "phenotype", 20, 1) {
-            Err(SearchError::Internal(_)) => {}
+            Err(SearchError::Unreachable(_)) => {}
             Ok(hits) => panic!(
                 "an unknown index path must not yield hits, got {} of them",
                 hits.len()
             ),
-            Err(other) => panic!("expected Internal, got {other:?}"),
+            Err(other) => panic!("expected Unreachable, got {other:?}"),
         }
     }
 

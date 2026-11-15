@@ -26,7 +26,15 @@ use serde::{Deserialize, Serialize};
 /// Field order and names follow GN4's struct so a diff against
 /// `src/search/mod.rs` is mechanical. `extra` is not part of that struct's
 /// 18 named fields — it is the catch-all that keeps the proxy transparent.
+///
+/// The `utoipa` derive and the `extra` attribute are behind the `schema`
+/// feature: GN4 re-exports this type and documents it inside
+/// `Envelope<T: Serialize + ToSchema>`, which makes `ToSchema` a
+/// type-formation requirement there (`src/response.rs:61`), and a derive is
+/// the only way to supply it for a type this crate defines. The attribute
+/// text is GN4's own (`src/search/mod.rs:150-152`), moved with the field.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(utoipa::ToSchema))]
 pub struct SearchHit {
     /// Trait or record name ("10199", "17985").
     pub name: Option<String>,
@@ -78,6 +86,10 @@ pub struct SearchHit {
     /// today (SCOUT-PROXY §4.2), and the native backend's doc data may
     /// grow others.
     #[serde(flatten)]
+    #[cfg_attr(
+        feature = "schema",
+        schema(value_type = Option<std::collections::BTreeMap<String, String>>)
+    )]
     pub extra: BTreeMap<String, serde_json::Value>,
 }
 

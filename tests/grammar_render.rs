@@ -584,11 +584,17 @@ fn a_not_after_a_binary_operator_is_not_dangling() {
     assert_eq!(rendered[2].kind, TermKind::Operator);
 }
 
-/// An unbalanced quote is the same error class (422 `invalid_query`,
-/// `QueryParserError`); only the class is pinned — no recorded shape carries
-/// an unterminated phrase (F6).
+/// An unbalanced quote is the renderer's own rejection — and NOT the engine's.
+///
+/// This is the one renderer rule the moved engine does not share: xapian
+/// parses `alcohol "dependence` as a phrase whose close it supplies, so
+/// `gn_search::search` accepts it (measured after the move: it reaches the
+/// index and fails as `Internal`, not `InvalidQuery`). The engine is
+/// authority, so this test pins the DOUBLE's rule and says so, rather than
+/// claiming a production class it does not have. No recorded shape carries an
+/// unterminated phrase (F6), so nothing graded moves.
 #[test]
-fn an_unbalanced_quote_is_a_syntax_error() {
+fn an_unbalanced_quote_is_the_renderers_own_syntax_error() {
     let error = GRAMMAR
         .render("alcohol \"dependence")
         .expect_err("the phrase never closes");
@@ -599,12 +605,6 @@ fn an_unbalanced_quote_is_a_syntax_error() {
         }
     );
     assert_eq!(error.xapian_error_type(), "QueryParserError");
-    match gn_search::search("", "alcohol \"dependence", "phenotype", 20, 1) {
-        Err(SearchError::InvalidQuery {
-            xapian_error_type, ..
-        }) => assert_eq!(xapian_error_type.as_deref(), Some("QueryParserError")),
-        other => panic!("expected InvalidQuery, got {other:?}"),
-    }
     // A balanced phrase is not a syntax fault (the recorded Q04 shape).
     assert!(GRAMMAR.render("\"alcohol dependence\"").is_ok());
 }

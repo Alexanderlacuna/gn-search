@@ -1,5 +1,13 @@
+#![cfg(feature = "fixture")]
 //! The parity corpus runner: GN4's 54 recorded query shapes, replayed
 //! through this crate and graded — with GN4 never compiling.
+//!
+//! FIXTURE-BACKED, NOT PARITY. This target needs `--features fixture`: the
+//! fixture double (`src/index/fixture.rs`) is what answers the match-set
+//! shapes, and no real xapian index is involved anywhere. The error
+//! classes, by contrast, are graded through the production entry point
+//! (`gn_search::search`), because the engine decides them before it opens
+//! an index.
 //!
 //! SCOUT sections implemented: SCOUT-NATIVE §3 (the grammar those shapes
 //! exercise), §6 (the error classes they record) and SCOUT-PROXY §4 (what
@@ -34,12 +42,10 @@
 //! term dictionary, no boolean structure, one hit field per slot. A shape
 //! whose terms fall outside that is reported `SKIP` with the reason — never
 //! `PASS`, and never `FAIL`, because a difference there would grade the
-//! double rather than the crate. What a skip is attributable to depends on
-//! the build, and [`SKIP_ATTRIBUTION`] names it per build: the default build
-//! skips for the missing xapian backend (no xapian index is compiled in),
-//! while `--features xapian` skips for the missing fixture backend (no
-//! inventory is compiled in, so there is no document set to restrict a
-//! recorded match set to).
+//! double rather than the crate. Every `SKIP` here is attributable to one
+//! absence and [`SKIP_ATTRIBUTION`] names it: the fixture double has five
+//! documents and no term dictionary, so the shapes it cannot answer need the
+//! real xapian index this runner does not have.
 //!
 //! # Running it
 //!
@@ -53,7 +59,8 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use gn_search::grammar::{ParsedQuery, TermKind, GRAMMAR};
-use gn_search::{SearchError, SearchHit};
+use gn_search::index::fixture::FixtureIndex;
+use gn_search::{Index, SearchError, SearchHit};
 
 /// The corpus's own clause-(b) floor (GN4 `tests/search_parity.rs:64`).
 const JACCARD_FLOOR: f64 = 0.8;
@@ -97,33 +104,15 @@ const CORPUS_ENV: &str = "GN4_PARITY_FIXTURES";
 /// runner must not pretend to have a real index.
 const FIXTURE_PATH: &str = "";
 
-/// Whether the in-memory fixture is this build's backend. `src/lib.rs` picks
-/// the backend at build time: with the `xapian` feature on, `gn_search::search`
-/// opens the xapian stub instead, so [`fixture_inventory`] — the document set
-/// every recorded match set is restricted to — is not reachable and no
-/// set-equality comparison can be graded.
-const FIXTURE_BACKEND: bool = cfg!(not(feature = "xapian"));
-
-/// The verdict every inventory-dependent comparison carries when the fixture
-/// backend is not compiled in: a `SKIP` naming that reason, never a `PASS`.
-const NO_FIXTURE_BACKEND: &str = "no-fixture-backend-under-this-feature";
-
-/// What the summary line attributes this build's `SKIP`s to: the absence THIS
-/// build has, never the other build's.
-///
-/// The two builds are missing different things. The default build has no
-/// xapian backend, so a shape the five-document double cannot answer has no
-/// real index behind it; `--features xapian` has no fixture inventory at all,
-/// so every recorded-200 shape is a [`NO_FIXTURE_BACKEND`] skip and the xapian
-/// stub is never asked for a match set. One fixed sentence named the xapian
-/// backend in both builds, which made the feature run's summary report the
-/// absence of the very thing that build compiles in (`VERIFY-REMAINING.md`
+/// What the summary line attributes this run's `SKIP`s to: the absence THIS
+/// runner has. There is one such absence now — no real index — because the
+/// fixture backend is compiled in by the file's own `--features fixture` gate
+/// and the engine is always compiled in. It used to be per-build (the old
+/// `xapian` feature build had no fixture inventory), which made a summary name
+/// the absence of the very thing that build compiled in (`VERIFY-REMAINING.md`
 /// F2).
-const SKIP_ATTRIBUTION: &str = if FIXTURE_BACKEND {
-    "the missing xapian backend's: no xapian index is compiled into this build"
-} else {
-    "the missing fixture backend's: no fixture inventory is compiled into this build"
-};
+const SKIP_ATTRIBUTION: &str =
+    "the fixture double's: these shapes need a real xapian index, and this runner has none";
 
 /// The `(dataset, name)` identity of a hit, both sides optional so an absent
 /// field is a distinct key and never coerced to `""` — the corpus's own
@@ -312,9 +301,9 @@ fn clause_b_pass(recorded_hits: u64, j: f64) -> Option<bool> {
 /// a substring test, it has no term dictionary and no boolean structure, and
 /// it has one hit field per value slot (`src/index/fixture.rs`, module doc).
 /// A shape that needs more than that needs the real xapian index, which this
-/// build does not have.
+/// runner does not have.
 fn fixture_blocker(shape: &Shape, parsed: &ParsedQuery) -> Option<String> {
-    let needs_xapian = "no xapian backend is compiled into this build";
+    let needs_xapian = "the fixture double cannot answer it, and no xapian index is configured";
     let recorded_count = match shape.recorded_hits {
         Some(count) => count.to_string(),
         None => "no".to_string(),
@@ -603,12 +592,30 @@ fn evidence_shortfall(rows: &[Row]) -> Option<String> {
 /// The fixture's whole document set: the match set of the empty query, with
 /// no type filter. This is what `recorded ∩ inventory` is taken against.
 fn fixture_inventory() -> BTreeSet<HitKey> {
-    let hits = gn_search::search(FIXTURE_PATH, "", "", 0, 1).expect(
-        "the fixture answers an empty query with an empty index path; run this target without \
-         the `xapian` feature (that build's stub refuses an empty path as an unset \
-         XAPIAN_DB_PATH)",
-    );
+    let hits = fixture_search("", "", 0, 1)
+        .expect("the fixture answers an empty query with an empty index path");
     key_set(&hits)
+}
+
+/// The fixture backend's answer for one shape: render the query with the
+/// double's selector ([`GRAMMAR`] — see `src/grammar.rs`, which production
+/// does not use) and ask the fixture index for the match set from the page's
+/// offset. This is the ONLY place the renderer is consulted, and it is a
+/// test target.
+fn fixture_search(
+    q: &str,
+    type_: &str,
+    limit: u64,
+    page: u64,
+) -> Result<Vec<SearchHit>, SearchError> {
+    let parsed = GRAMMAR
+        .render(q)
+        .map_err(|error| SearchError::InvalidQuery {
+            message: error.message().to_string(),
+            xapian_error_type: Some(error.xapian_error_type().to_string()),
+        })?;
+    let index = FixtureIndex::open(FIXTURE_PATH)?;
+    index.search(&parsed.with_type(type_), limit, page)
 }
 
 fn grade(shape: &Shape, inventory: &BTreeSet<HitKey>) -> Row {
@@ -626,10 +633,16 @@ fn grade(shape: &Shape, inventory: &BTreeSet<HitKey>) -> Row {
         verdict,
     };
 
-    // The crate's answer, through the same entry point GN4's engine seam
-    // uses. `limit = 0` is the unbounded fetch (`Index::search`): the whole
-    // match set, which is what the parity metric grades.
-    let searched = gn_search::search(FIXTURE_PATH, &shape.raw_query, &shape.type_, 0, 1);
+    // The answer under test. An error shape is graded through the PRODUCTION
+    // entry point — the engine parses before it opens an index, so the class
+    // is decided with no index at all. A 200 shape is put to the fixture
+    // double instead: a real match set needs a real index, which this target
+    // does not have. `limit = 0` is the unbounded fetch (`Index::search`).
+    let searched = if shape.is_error() {
+        gn_search::search(FIXTURE_PATH, &shape.raw_query, &shape.type_, 0, 1)
+    } else {
+        fixture_search(&shape.raw_query, &shape.type_, 0, 1)
+    };
 
     if shape.is_error() {
         // The error class is index-independent: it is decided by the
@@ -696,35 +709,6 @@ fn grade(shape: &Shape, inventory: &BTreeSet<HitKey>) -> Row {
             )
         }
     };
-    // The set comparison below is taken against the fixture's inventory, and
-    // under the `xapian` feature the fixture is not this build's backend:
-    // there is nothing to compare against, so the line says so and grades
-    // nothing. Never a PASS (nothing was compared) and never a FAIL (the
-    // backend this build does have is a stub, by design).
-    if !FIXTURE_BACKEND {
-        // The `ours` column carries the error CLASS here, as it does on the
-        // error-class rows above: the message is the same on all 51 lines and
-        // says only that this build has no index configured.
-        let ours = match &searched {
-            Ok(hits) => format!("{} hits", hits.len()),
-            Err(SearchError::InvalidQuery {
-                xapian_error_type, ..
-            }) => format!(
-                "InvalidQuery({})",
-                xapian_error_type.as_deref().unwrap_or("no class")
-            ),
-            Err(SearchError::Unreachable(_)) => "Unreachable".to_string(),
-            Err(SearchError::Misbehaving(_)) => "Misbehaving".to_string(),
-            Err(SearchError::Backend(_)) => "Backend".to_string(),
-            Err(SearchError::Internal(_)) => "Internal".to_string(),
-        };
-        return row(
-            ours,
-            Graded::Nothing,
-            Verdict::Skip(NO_FIXTURE_BACKEND.to_string()),
-        );
-    }
-
     let hits = match &searched {
         Ok(hits) => hits,
         Err(error) => {
@@ -822,9 +806,8 @@ fn grade(shape: &Shape, inventory: &BTreeSet<HitKey>) -> Row {
 /// if any shape FAILs. In the default build it also fails if fewer than
 /// [`MIN_GRADED`] shapes graded a set-equality or Jaccard comparison — a
 /// thinned corpus or an all-SKIP run is not evidence, however green it looks.
-/// Under `--features xapian` it fails if the opposite happens and *anything*
-/// graded a match set, because that build has no inventory to grade one
-/// against; that run is a compile-and-error-class gate.
+/// Under `--features fixture` (the only build this file compiles in) the
+/// fixture is the inventory, so the floor always applies.
 #[test]
 fn corpus_report() {
     let corpus = corpus_dir();
@@ -834,31 +817,21 @@ fn corpus_report() {
         "no Q*.json fixtures in {}",
         corpus.display()
     );
-    let inventory = if FIXTURE_BACKEND {
-        let inventory = fixture_inventory();
-        assert!(
-            !inventory.is_empty(),
-            "the fixture index answered an empty query with nothing; the runner cannot grade anything"
-        );
-        inventory
-    } else {
-        // No fixture backend, so no inventory: `grade` turns every 200 shape
-        // into a `SKIP(NO_FIXTURE_BACKEND)` line, and the evidence floor below
-        // is not applied because this build has no graded comparison to fall
-        // short of.
-        BTreeSet::new()
-    };
+    let inventory = fixture_inventory();
+    assert!(
+        !inventory.is_empty(),
+        "the fixture index answered an empty query with nothing; the runner cannot grade anything"
+    );
 
     let mut rows = Vec::new();
     for shape in &shapes {
         rows.push(grade(shape, &inventory));
     }
 
-    let backend = if FIXTURE_BACKEND {
-        format!("fixture index: {} documents", inventory.len())
-    } else {
-        "no fixture backend under this feature".to_string()
-    };
+    let backend = format!(
+        "fixture index: {} documents, fixture-backed, not parity",
+        inventory.len()
+    );
     println!(
         "\nparity corpus: {} shapes from {} ({backend})\n",
         shapes.len(),
@@ -884,18 +857,10 @@ fn corpus_report() {
         counts.passed,
         counts.failed
     );
-    if FIXTURE_BACKEND {
-        println!(
-            "exit rule: any FAIL fails the test, and so does fewer than MIN_GRADED = {MIN_GRADED} \
-             graded comparisons; PASS, VACUOUS and SKIP alone are not evidence\n"
-        );
-    } else {
-        println!(
-            "exit rule: any FAIL fails the test, and so does a graded match-set comparison in a \
-             build with no fixture backend to grade one against; the MIN_GRADED = {MIN_GRADED} \
-             evidence floor is not applied to this run\n"
-        );
-    }
+    println!(
+        "exit rule: any FAIL fails the test, and so does fewer than MIN_GRADED = {MIN_GRADED} \
+         graded comparisons; PASS, VACUOUS and SKIP alone are not evidence\n"
+    );
 
     let failed: Vec<&Row> = rows.iter().filter(|row| row.verdict.is_fail()).collect();
     assert!(
@@ -907,25 +872,6 @@ fn corpus_report() {
             .map(|row| format!("{}: {}", row.id, row.verdict))
             .collect::<Vec<_>>()
     );
-    if !FIXTURE_BACKEND {
-        // `--features xapian`: the fixture is not this build's backend, so
-        // every inventory-dependent comparison above printed
-        // `SKIP(NO_FIXTURE_BACKEND)` and graded nothing. The error classes
-        // still graded (the grammar decides them before any index is
-        // opened), and the floor is not applied because there is no graded
-        // comparison for it to be short of — a build that claims match-set
-        // evidence it never compared is worse than one that says it has none.
-        assert_eq!(
-            counts.graded, 0,
-            "a build without the fixture backend graded a match set: {counts:?}"
-        );
-        println!(
-            "no fixture backend under this feature: {} shapes SKIP({}), 0 graded — a \
-             compile-and-error-class gate, not evidence about any match set\n",
-            counts.skipped, NO_FIXTURE_BACKEND
-        );
-        return;
-    }
     if let Some(shortfall) = evidence_shortfall(&rows) {
         panic!("{shortfall}");
     }
@@ -1021,7 +967,6 @@ mod metric_tests {
 
     /// A 200 shape recording `identifiers`, for the two tests that grade one
     /// against the fixture's inventory (hence the gate).
-    #[cfg(not(feature = "xapian"))]
     fn recorded_shape(
         id: &str,
         raw_query: &str,
@@ -1077,7 +1022,7 @@ mod metric_tests {
                 reported(
                     &format!("Q{:02}", index + 1),
                     Graded::Nothing,
-                    Verdict::Skip("no xapian backend".to_string()),
+                    Verdict::Skip("the double cannot answer it; no index".to_string()),
                 )
             })
             .collect();
@@ -1151,9 +1096,8 @@ mod metric_tests {
     /// difference between "we found nothing" and "we found the right
     /// nothing" is the whole point (`REVIEW-FIXES.md` §b(ii)).
     ///
-    /// Gated: it grades through the fixture's inventory, which this build only
-    /// has without the `xapian` feature (`FIXTURE_BACKEND`).
-    #[cfg(not(feature = "xapian"))]
+    /// Grades through the fixture's inventory, which the file's
+    /// `--features fixture` gate compiles in.
     #[test]
     fn an_empty_expected_set_is_vacuous_not_graded() {
         let inventory = fixture_inventory();
@@ -1186,9 +1130,8 @@ mod metric_tests {
     /// GN4's positionless index answers a phrase with 0 hits
     /// (`genenetwork4/docs/search-engines.md:98-102`; DECISIONS rows 35, 36).
     ///
-    /// Gated for the same reason as the VACUOUS test above: it needs the
-    /// fixture's inventory.
-    #[cfg(not(feature = "xapian"))]
+    /// Needs the fixture's inventory, which the file's `--features fixture`
+    /// gate compiles in.
     #[test]
     fn a_phrase_shape_is_skipped_as_unrepresentable() {
         let inventory = fixture_inventory();

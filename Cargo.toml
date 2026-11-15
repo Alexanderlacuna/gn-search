@@ -3,33 +3,54 @@
 # Sections implemented, per file, are named in each module's header; the
 # crate as a whole implements the seam of SYNTHESIS §3 (the `(index_path,
 # q, type, limit, page) -> Vec<SearchHit>` four-tuple GN4's `Engine` trait
-# forwards) over the grammar of SCOUT-NATIVE §3 and the hit shape of
-# SCOUT-NATIVE §4.
+# forwards) over the xapian query language GN4's native engine configures
+# (SCOUT-NATIVE §3) and the hit shape of SCOUT-NATIVE §4.
 #
-# The default build has no third-party dependency beyond serde/serde_json
-# (both pinned to the versions GN4's own Cargo.toml pins); the `xapian`
-# and `serve` features add no dependencies either, so the crate builds
-# offline.
+# The engine is GN4's `src/search/native.rs`, moved here (see
+# `src/native.rs`). Two dependencies are not serde:
+#
+#   * `xapian-rs` — the binding the engine is written against, pinned
+#     exactly as GN4 pins it. It is a git fork, not a crates.io release,
+#     and it needs the xapian C++ library, so this crate builds inside the
+#     guix shell that provides both (README, "Running the tests").
+#   * `utoipa`, behind the non-default `schema` feature — only so GN4 can
+#     re-export `SearchHit` without losing its `ToSchema` derive
+#     (`Envelope<T: Serialize + ToSchema>` makes that a type-formation
+#     requirement at GN4's call sites, and an impl in GN4 would be an
+#     orphan rule violation).
 
 [package]
 name = "gn-search"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.70"
-description = "GeneNetwork search seam: query grammar, index trait and hit shape, so a search backend can be swapped behind one function"
+rust-version = "1.75"
+description = "GeneNetwork search seam: the xapian query engine, the hit shape, and one function over them"
 license = "AGPL-3.0-or-later"
 
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+# The engine's xapian bindings: the Alexanderlacuna fork of
+# torrancew/xapian-rs, pinned to the rev carrying the full round-3 patch set
+# (parse_query_checked + ParseError, the MatchNothing decline fix, the f64
+# range-bound fix, and the crate-level cxx =1.0.122 pin). The pin is copied
+# from GN4's Cargo.toml:29 — same rev, so both sides link the same binding.
+# See ~/spikes/port-design/PORT-DESIGN.md §6 and AMENDMENT A.
+xapian-rs = { git = "https://github.com/Alexanderlacuna/xapian-rs", rev = "70c5eace78dbca29c434cb103cb8b2c5d4246f0d" }
+# `SearchHit`'s OpenAPI schema, for consumers that document the shape. Off by
+# default: the engine does not need it, and pinning a doc generator into every
+# build of a search backend would be a dependency nobody asked for.
+utoipa = { version = "5.5.0", optional = true }
 
 [features]
 default = []
-# The xapian backend. Off by default because no Rust xapian binding is a
-# crates.io dependency: GN4 uses the `xapian_rs` fork (SCOUT-NATIVE §8).
-# With this feature on, `src/index/xapian.rs` is a stub that performs the
-# pre-checks and then stops.
-xapian = []
+# `#[derive(utoipa::ToSchema)]` on `SearchHit` (GN4 enables this).
+schema = ["dep:utoipa"]
+# The in-memory fixture index (`src/index/fixture.rs`) and the parity corpus
+# runner's document set. Off by default: it is a TEST DOUBLE, and a build
+# that answered a real index path with its five recorded hits would fabricate
+# search results. Production never needs it.
+fixture = []
 # The development HTTP server in `src/bin/gn-search.rs`. Off by default so
 # the default build produces the library and nothing else; the server is
 # plain `std::net`, no axum/tokio.
