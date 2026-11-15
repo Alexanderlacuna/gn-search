@@ -34,8 +34,12 @@
 //! term dictionary, no boolean structure, one hit field per slot. A shape
 //! whose terms fall outside that is reported `SKIP` with the reason — never
 //! `PASS`, and never `FAIL`, because a difference there would grade the
-//! double rather than the crate. Every skip is attributable to the missing
-//! backend (no xapian is compiled into this build), not to the shape.
+//! double rather than the crate. What a skip is attributable to depends on
+//! the build, and [`SKIP_ATTRIBUTION`] names it per build: the default build
+//! skips for the missing xapian backend (no xapian index is compiled in),
+//! while `--features xapian` skips for the missing fixture backend (no
+//! inventory is compiled in, so there is no document set to restrict a
+//! recorded match set to).
 //!
 //! # Running it
 //!
@@ -103,6 +107,23 @@ const FIXTURE_BACKEND: bool = cfg!(not(feature = "xapian"));
 /// The verdict every inventory-dependent comparison carries when the fixture
 /// backend is not compiled in: a `SKIP` naming that reason, never a `PASS`.
 const NO_FIXTURE_BACKEND: &str = "no-fixture-backend-under-this-feature";
+
+/// What the summary line attributes this build's `SKIP`s to: the absence THIS
+/// build has, never the other build's.
+///
+/// The two builds are missing different things. The default build has no
+/// xapian backend, so a shape the five-document double cannot answer has no
+/// real index behind it; `--features xapian` has no fixture inventory at all,
+/// so every recorded-200 shape is a [`NO_FIXTURE_BACKEND`] skip and the xapian
+/// stub is never asked for a match set. One fixed sentence named the xapian
+/// backend in both builds, which made the feature run's summary report the
+/// absence of the very thing that build compiles in (`VERIFY-REMAINING.md`
+/// F2).
+const SKIP_ATTRIBUTION: &str = if FIXTURE_BACKEND {
+    "the missing xapian backend's: no xapian index is compiled into this build"
+} else {
+    "the missing fixture backend's: no fixture inventory is compiled into this build"
+};
 
 /// The `(dataset, name)` identity of a hit, both sides optional so an absent
 /// field is a distinct key and never coerced to `""` — the corpus's own
@@ -798,9 +819,12 @@ fn grade(shape: &Shape, inventory: &BTreeSet<HitKey>) -> Row {
 ///
 /// The lines are the deliverable (`docs/CORPUS-RUNNER.md` documents them):
 /// `id | query | type | recorded | ours | graded | verdict`. The test fails
-/// if any shape FAILs, and it fails if fewer than [`MIN_GRADED`] shapes
-/// graded a set-equality or Jaccard comparison: a thinned corpus or an
-/// all-SKIP run is not evidence, however green it looks.
+/// if any shape FAILs. In the default build it also fails if fewer than
+/// [`MIN_GRADED`] shapes graded a set-equality or Jaccard comparison — a
+/// thinned corpus or an all-SKIP run is not evidence, however green it looks.
+/// Under `--features xapian` it fails if the opposite happens and *anything*
+/// graded a match set, because that build has no inventory to grade one
+/// against; that run is a compile-and-error-class gate.
 #[test]
 fn corpus_report() {
     let corpus = corpus_dir();
@@ -850,8 +874,8 @@ fn corpus_report() {
     let counts = summarize(&rows);
     println!(
         "\n{} shapes seen: {} graded a set-equality/Jaccard comparison, {} graded an error \
-         class, {} VACUOUS (expected set empty: no evidence), {} SKIP (the missing xapian \
-         backend's, see docs/CORPUS-RUNNER.md); {} PASS, {} FAIL",
+         class, {} VACUOUS (expected set empty: no evidence), {} SKIP ({SKIP_ATTRIBUTION}, see \
+         docs/CORPUS-RUNNER.md); {} PASS, {} FAIL",
         counts.seen,
         counts.graded,
         counts.error_class,
@@ -860,10 +884,18 @@ fn corpus_report() {
         counts.passed,
         counts.failed
     );
-    println!(
-        "exit rule: any FAIL fails the test, and so does fewer than MIN_GRADED = {MIN_GRADED} graded \
-         comparisons; PASS, VACUOUS and SKIP alone are not evidence\n"
-    );
+    if FIXTURE_BACKEND {
+        println!(
+            "exit rule: any FAIL fails the test, and so does fewer than MIN_GRADED = {MIN_GRADED} \
+             graded comparisons; PASS, VACUOUS and SKIP alone are not evidence\n"
+        );
+    } else {
+        println!(
+            "exit rule: any FAIL fails the test, and so does a graded match-set comparison in a \
+             build with no fixture backend to grade one against; the MIN_GRADED = {MIN_GRADED} \
+             evidence floor is not applied to this run\n"
+        );
+    }
 
     let failed: Vec<&Row> = rows.iter().filter(|row| row.verdict.is_fail()).collect();
     assert!(
@@ -888,9 +920,9 @@ fn corpus_report() {
             "a build without the fixture backend graded a match set: {counts:?}"
         );
         println!(
-            "no fixture backend under this feature: {} shapes SKIP({}), 0 graded; the evidence \
-             floor MIN_GRADED = {} is not applied to this run\n",
-            counts.skipped, NO_FIXTURE_BACKEND, MIN_GRADED
+            "no fixture backend under this feature: {} shapes SKIP({}), 0 graded — a \
+             compile-and-error-class gate, not evidence about any match set\n",
+            counts.skipped, NO_FIXTURE_BACKEND
         );
         return;
     }

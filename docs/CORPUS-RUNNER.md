@@ -338,13 +338,23 @@ Both runs, verbatim (`cargo test --offline --test parity_corpus -- --nocapture`)
 
 ```
 # default — the evidence gate: 5 match-set comparisons, floor applied
-54 shapes seen: 5 graded a set-equality/Jaccard comparison, 3 graded an error class, 7 VACUOUS (expected set empty: no evidence), 39 SKIP (the missing xapian backend's, see docs/CORPUS-RUNNER.md); 8 PASS, 0 FAIL
+54 shapes seen: 5 graded a set-equality/Jaccard comparison, 3 graded an error class, 7 VACUOUS (expected set empty: no evidence), 39 SKIP (the missing xapian backend's: no xapian index is compiled into this build, see docs/CORPUS-RUNNER.md); 8 PASS, 0 FAIL
 exit rule: any FAIL fails the test, and so does fewer than MIN_GRADED = 5 graded comparisons; PASS, VACUOUS and SKIP alone are not evidence
 
 # --features xapian — 0 match-set comparisons, the floor is NOT applied
-54 shapes seen: 0 graded a set-equality/Jaccard comparison, 3 graded an error class, 0 VACUOUS (expected set empty: no evidence), 51 SKIP (the missing xapian backend's, see docs/CORPUS-RUNNER.md); 3 PASS, 0 FAIL
-no fixture backend under this feature: 51 shapes SKIP(no-fixture-backend-under-this-feature), 0 graded; the evidence floor MIN_GRADED = 5 is not applied to this run
+54 shapes seen: 0 graded a set-equality/Jaccard comparison, 3 graded an error class, 0 VACUOUS (expected set empty: no evidence), 51 SKIP (the missing fixture backend's: no fixture inventory is compiled into this build, see docs/CORPUS-RUNNER.md); 3 PASS, 0 FAIL
+exit rule: any FAIL fails the test, and so does a graded match-set comparison in a build with no fixture backend to grade one against; the MIN_GRADED = 5 evidence floor is not applied to this run
+
+no fixture backend under this feature: 51 shapes SKIP(no-fixture-backend-under-this-feature), 0 graded — a compile-and-error-class gate, not evidence about any match set
 ```
+
+Two things in those lines are the report telling you which build you are in,
+not decoration: the `SKIP` parenthetical (`SKIP_ATTRIBUTION` in the test —
+the missing **xapian** backend by default, the missing **fixture** inventory
+under the feature, never the other build's absence, `VERIFY-REMAINING.md`
+F2), and the exit rule (the floor of 5 in the default build; no floor, and an
+assertion that *nothing* graded a match set, under the feature, `F3`). A run
+that names the wrong absence is a bug in the runner, not a wording nit.
 
 The mechanism: `FIXTURE_BACKEND` is `false` under the feature
 (`tests/parity_corpus.rs:101`), so `corpus_report` opens no inventory, prints

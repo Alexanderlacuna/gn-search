@@ -153,13 +153,22 @@ Both corpus reports, measured (`cargo test --offline --test parity_corpus --
 
 ```
 # default build — the evidence gate
-54 shapes seen: 5 graded a set-equality/Jaccard comparison, 3 graded an error class, 7 VACUOUS (expected set empty: no evidence), 39 SKIP (the missing xapian backend's, see docs/CORPUS-RUNNER.md); 8 PASS, 0 FAIL
+54 shapes seen: 5 graded a set-equality/Jaccard comparison, 3 graded an error class, 7 VACUOUS (expected set empty: no evidence), 39 SKIP (the missing xapian backend's: no xapian index is compiled into this build, see docs/CORPUS-RUNNER.md); 8 PASS, 0 FAIL
 exit rule: any FAIL fails the test, and so does fewer than MIN_GRADED = 5 graded comparisons; PASS, VACUOUS and SKIP alone are not evidence
 
 # --features xapian — a compile-and-error-class gate
-54 shapes seen: 0 graded a set-equality/Jaccard comparison, 3 graded an error class, 0 VACUOUS (expected set empty: no evidence), 51 SKIP (the missing xapian backend's, see docs/CORPUS-RUNNER.md); 3 PASS, 0 FAIL
-no fixture backend under this feature: 51 shapes SKIP(no-fixture-backend-under-this-feature), 0 graded; the evidence floor MIN_GRADED = 5 is not applied to this run
+54 shapes seen: 0 graded a set-equality/Jaccard comparison, 3 graded an error class, 0 VACUOUS (expected set empty: no evidence), 51 SKIP (the missing fixture backend's: no fixture inventory is compiled into this build, see docs/CORPUS-RUNNER.md); 3 PASS, 0 FAIL
+exit rule: any FAIL fails the test, and so does a graded match-set comparison in a build with no fixture backend to grade one against; the MIN_GRADED = 5 evidence floor is not applied to this run
+
+no fixture backend under this feature: 51 shapes SKIP(no-fixture-backend-under-this-feature), 0 graded — a compile-and-error-class gate, not evidence about any match set
 ```
+
+Read the two `SKIP` parentheticals against each other: each names the absence
+*its own* build has. The default build skips because no **xapian** backend is
+compiled in; the feature build skips because no **fixture** inventory is — the
+xapian backend is present there, and it is a stub. Neither line describes the
+other build, and the exit rule states the floor each run actually applies (the
+feature run applies none).
 
 So `88 / 0` under the feature is *less* evidence than the default `84 / 0`: the
 five set-equality comparisons (two of them two-sided) and the `MIN_GRADED =
