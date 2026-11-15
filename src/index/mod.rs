@@ -20,6 +20,9 @@ use crate::SearchError;
 
 pub mod fixture;
 
+#[cfg(feature = "xapian")]
+pub mod xapian;
+
 /// A searchable index.
 pub trait Index: Sized {
     /// Open the index at `path`.

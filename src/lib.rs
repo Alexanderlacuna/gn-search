@@ -51,6 +51,7 @@ pub mod error;
 pub mod grammar;
 pub mod hit;
 pub mod index;
+pub mod manifest;
 
 pub use error::SearchError;
 pub use grammar::{
