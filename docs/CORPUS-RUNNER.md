@@ -15,11 +15,14 @@ cargo test --test parity_corpus -- --nocapture
 ```
 
 `--nocapture` is required: the per-shape report goes to stdout, and `cargo`
-swallows stdout for passing tests. This target is **default-feature only**:
-under `--features xapian` the fixture backend is replaced by the xapian stub,
-which refuses the empty index path the runner uses, and the test fails at
-`fixture_inventory` with a message telling you to run it without `xapian`. A different corpus is picked up from the
-same variable GN4's harness honours:
+swallows stdout for passing tests. **This target carries evidence only in the
+DEFAULT build.** Under `--features xapian` the fixture backend is replaced by
+the xapian stub, so the runner opens no inventory, `SKIP`s every
+recorded-200 shape by name, grades nothing but the three error classes and
+does not apply the `MIN_GRADED` floor — it passes, and passing means "it
+builds and the error classes hold", not "the results are right". That run is
+in "Under `--features xapian`" below, with both summary lines quoted. A
+different corpus is picked up from the same variable GN4's harness honours:
 
 ```sh
 GN4_PARITY_FIXTURES=/path/to/parity-fixtures cargo test --test parity_corpus -- --nocapture
@@ -244,17 +247,113 @@ Not proved (documented, not hidden):
    mistranscribed, this runner inherits it; it is the same corpus GN4 grades
    against, which is the point.
 
+One of those gaps is the crate's main representational limit rather than a
+fixture limitation, so it has its own section next: the phrase class.
+
+## What this runner cannot grade and why
+
+This is the crate's **main representational limit**, stated as its own section
+because every other gap below is "the fixture is a double" while this one is
+"the seam cannot say it":
+
+> **The phrase class.** A query whose answer depends on word ADJACENCY is
+> not graded by anything in this crate, and cannot be graded by this runner at
+> all.
+
+### The class
+
+Three syntactic forms, one semantics:
+
+| form | example | GN4 builds |
+|---|---|---|
+| a quoted region | `"alcohol dependence"` (Q04) | one xapian phrase |
+| a positional operator | `alcohol NEAR dependence` (Q11), `alcohol ADJ dependence` (Q12) | a phrase, via xapian's `NEAR`/`ADJ` |
+| a field token the grammar does not consume as a range | `year:2014`, `mean:5` | the phrase `year 2014`, `mean 5` (`native.rs:721-724`) |
+
+The renderer emits the WORDS and marks them `phrase`
+(`RenderedTerm::phrase`, `src/grammar.rs`; `docs/DECISIONS.md` rows 34 and
+36), so the adjacency is expressible to a backend — but this crate never
+evaluates it, and nothing here checks that a backend would.
+
+### The evidence: 0 hits, so there is nothing to compare
+
+GN4's index stores stemmed terms with **no positions**, so a phrase or a
+`NEAR`/`ADJ` query parses and then matches **zero** documents
+(`genenetwork4/docs/search-engines.md:98-102`). The corpus records exactly
+that: **Q04, Q11 and Q12 each recorded 0 hits**.
+
+An expected set of zero is not gradeable evidence by this runner's own rule
+— it is `VACUOUS`, and the zero is structural, not a fact about ranking. If
+the runner graded it, any backend that ANDed the words would pass (the zero
+would agree), while an AND matches a *larger* set than the phrase: passing the
+shapes would bless exactly the false-positive query the marker exists to
+prevent. So the class is **`SKIP`ped by name**, `phrase-not-expressible`
+(`is_phrase_shape`, `tests/parity_corpus.rs:396`; the reason string says the
+words are adjacent and the fixture can only AND). No new code was needed for
+this: the naming already existed.
+
+How much that is on the committed corpus: **3 of the 54 shapes** (Q04, Q11,
+Q12), all of them recorded-0. The field-token branch of the same test
+(`year:2014` → the phrase `year 2014`) is reachable in the code but no
+committed shape reaches it; it is exercised only by the constructed shapes
+Q55/Q56 in `tests/parity_corpus.rs::a_phrase_shape_is_skipped_as_unrepresentable`.
+
+### What guards it today, and what that is worth
+
+One unit test per form, and no parity:
+
+| guard | what it proves | what it does not |
+|---|---|---|
+| `tests/grammar_render.rs::a_bare_field_value_is_a_phrase_not_an_and` | `year:2014` renders two words BOTH marked `phrase`; `position:` is one word; `mean:1..2` is a range, not a phrase | that a backend turning those words into a phrase returns GN4's documents |
+| `tests/grammar_render.rs::a_quoted_value_is_never_a_range` | a quoted value is phrase content, never range syntax or a 422 | any match set for a quoted phrase |
+| `tests/parity_corpus.rs::a_phrase_shape_is_skipped_as_unrepresentable` | the phrase class is skipped BY NAME, never graded or passed | that phrases are right — it only proves the runner declines to claim |
+
+So the honest sentence is: **the phrase class has a shape and no oracle.**
+The 39 `SKIP`s absorb it, which is why `docs/VERIFY-FINAL.md` §4 could revert
+the quoting fixes and still get `8 PASS, 0 FAIL`.
+
+### The requirement on the real backend
+
+**The phrase class is answered by handing the phrase-marked terms to xapian's
+own parser as ONE phrase — never as an AND of words** (`docs/DECISIONS.md` row
+35). Concretely: consecutive `phrase` terms are one phrase object passed to
+`parse_query_checked`; nowhere in the renderer or the seam does the crate
+flatten them into `AND`. That requirement is met by construction in
+`src/grammar.rs` (the marker) and can only be *verified* by a populated index
+that stores positions — the positionless layout that produced Q04/Q11/Q12's
+zeros will keep producing zeros, so a wider fixture does not close this gap.
+
 ## Under `--features xapian`
 
-The runner is not evidence there, and says so instead of failing or passing: with
-the `xapian` feature on, `src/lib.rs` compiles the xapian stub as the backend and
-the fixture — whose document set every recorded match set is restricted to — is
-not in the build. `corpus_report` then opens no inventory, prints
-`SKIP(no-fixture-backend-under-this-feature)` on every recorded-200 shape, still
-grades the three error classes (the grammar decides those before any index is
-opened), does not apply the `MIN_GRADED` floor, and asserts that zero match-set
-comparisons were graded. The two tests below that need the inventory are gated
-on `#[cfg(not(feature = "xapian"))]`.
+**Read this before quoting a green feature run.** `--features xapian` is a
+compile-and-error-class gate, not an evidence gate: in that build the fixture —
+whose document set every recorded match set is restricted to — is not compiled
+in, `src/lib.rs` selects the xapian stub instead, and `corpus_report` grades
+**0 match-set comparisons** and does **not** apply the `MIN_GRADED` floor. Green
+there means exactly two things: **it builds**, and **the three recorded error
+classes still hold**. It says nothing about whether any query selects the right
+documents. The evidence gate is the **DEFAULT build.**
+
+Both runs, verbatim (`cargo test --offline --test parity_corpus -- --nocapture`):
+
+```
+# default — the evidence gate: 5 match-set comparisons, floor applied
+54 shapes seen: 5 graded a set-equality/Jaccard comparison, 3 graded an error class, 7 VACUOUS (expected set empty: no evidence), 39 SKIP (the missing xapian backend's, see docs/CORPUS-RUNNER.md); 8 PASS, 0 FAIL
+exit rule: any FAIL fails the test, and so does fewer than MIN_GRADED = 5 graded comparisons; PASS, VACUOUS and SKIP alone are not evidence
+
+# --features xapian — 0 match-set comparisons, the floor is NOT applied
+54 shapes seen: 0 graded a set-equality/Jaccard comparison, 3 graded an error class, 0 VACUOUS (expected set empty: no evidence), 51 SKIP (the missing xapian backend's, see docs/CORPUS-RUNNER.md); 3 PASS, 0 FAIL
+no fixture backend under this feature: 51 shapes SKIP(no-fixture-backend-under-this-feature), 0 graded; the evidence floor MIN_GRADED = 5 is not applied to this run
+```
+
+The mechanism: `FIXTURE_BACKEND` is `false` under the feature
+(`tests/parity_corpus.rs:101`), so `corpus_report` opens no inventory, prints
+`SKIP(no-fixture-backend-under-this-feature)` on every recorded-200 shape,
+still grades the three error classes (the grammar decides those before any
+index is opened), does not apply the `MIN_GRADED` floor, and asserts that zero
+match-set comparisons were graded. The two tests that need the inventory are
+gated on `#[cfg(not(feature = "xapian"))]`, which is why the target runs 7
+tests there and 9 by default.
 
 ## How to widen it
 

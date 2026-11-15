@@ -32,6 +32,7 @@ tests/                grammar render · hit round-trip · error-to-status table 
                       parity corpus (54 recorded shapes)
 docs/DECISIONS.md     one row per choice, with the alternative that was rejected and why
 docs/CORPUS-RUNNER.md what the parity runner grades, what it skips, and the command
+docs/KNOWN-DEBT.md    the one lint silenced at its site, and why it is not fixed
 ```
 
 Dependencies: `serde` 1.0.229 and `serde_json` 1.0.151 — the same pins as
@@ -93,6 +94,7 @@ cargo test --offline
 cargo test --offline --features serve
 cargo test --offline --features xapian
 cargo test --offline --all-features
+cargo clippy --offline --all-targets   # 0 warnings; see docs/KNOWN-DEBT.md
 ```
 
 `serde` 1.0.229 and `serde_json` 1.0.151 are in the local cargo registry cache
@@ -135,10 +137,35 @@ Where the feature columns differ from the default, and why:
   index is opened), and does not apply the `MIN_GRADED` floor
   (`docs/CORPUS-RUNNER.md`, "Under `--features xapian`").
 * `--features xapian` is **not** evidence about a real index: the backend is a
-  stub, so no xapian code path runs. The corpus's own report on the default
-  build (`cargo test --offline --test parity_corpus -- --nocapture`) is
-  `54 shapes seen: 5 graded a set-equality/Jaccard comparison, 3 graded an
-  error class, 7 VACUOUS ..., 39 SKIP; 8 PASS, 0 FAIL`.
+  stub, so no xapian code path runs. See the next subsection for what that
+  column does and does not mean.
+
+### The default build is the evidence gate; `--features xapian` is not
+
+Say it plainly, because the green numbers run the wrong way: **under
+`--features xapian` the corpus run grades 0 match-set comparisons and the
+evidence floor does not apply.** Green there means "it builds, and the three
+recorded error classes still hold" — nothing about whether a query selects the
+right documents. **The evidence gate is the default build.**
+
+Both corpus reports, measured (`cargo test --offline --test parity_corpus --
+--nocapture`, then the same command with `--features xapian`), verbatim:
+
+```
+# default build — the evidence gate
+54 shapes seen: 5 graded a set-equality/Jaccard comparison, 3 graded an error class, 7 VACUOUS (expected set empty: no evidence), 39 SKIP (the missing xapian backend's, see docs/CORPUS-RUNNER.md); 8 PASS, 0 FAIL
+exit rule: any FAIL fails the test, and so does fewer than MIN_GRADED = 5 graded comparisons; PASS, VACUOUS and SKIP alone are not evidence
+
+# --features xapian — a compile-and-error-class gate
+54 shapes seen: 0 graded a set-equality/Jaccard comparison, 3 graded an error class, 0 VACUOUS (expected set empty: no evidence), 51 SKIP (the missing xapian backend's, see docs/CORPUS-RUNNER.md); 3 PASS, 0 FAIL
+no fixture backend under this feature: 51 shapes SKIP(no-fixture-backend-under-this-feature), 0 graded; the evidence floor MIN_GRADED = 5 is not applied to this run
+```
+
+So `88 / 0` under the feature is *less* evidence than the default `84 / 0`: the
+five set-equality comparisons (two of them two-sided) and the `MIN_GRADED =
+5` floor exist only in the default build. `docs/CORPUS-RUNNER.md` explains the
+mechanism under "Under `--features xapian`", and names the one class no run
+here can grade — phrases — under "What this runner cannot grade and why".
 
 The dev server is a separate step, not part of `cargo test`:
 
@@ -151,7 +178,10 @@ curl -s 'http://127.0.0.1:8080/index'   # 503 index_unavailable with no XAPIAN_D
 ```
 
 What the gate does *not* prove: the xapian binding (absent — the stub is all
-there is, so no real index is ever opened), clippy (the tree carries a handful
-of style lints, none of them errors), and anything about a populated index on
-this machine (there is none: every `iamglass` directory here has no
-`postlist.glass`, which is why the pre-check refuses them).
+there is, so no real index is ever opened) and anything about a populated
+index on this machine (there is none: every `iamglass` directory here has no
+`postlist.glass`, which is why the pre-check refuses them). Clippy is not part
+of `cargo test`, and it is no longer a gap either: `cargo clippy --offline
+--all-targets` prints **0 warnings**, and the single lint silenced at its site
+(`clippy::type_complexity` on `parse_range`) is argued in
+`docs/KNOWN-DEBT.md`.
