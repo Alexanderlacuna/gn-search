@@ -1,5 +1,11 @@
 # WORKER-BLOCKERS — the five remaining blockers from `docs/REVIEW-FIXES.md` §d
 
+> **SUPERSEDED 2026-11-13 — the xapian gate is green; see `docs/VERIFY-GATE-TRUTH.md`
+> section 1 for the measured table.** This report is history: it was written before the
+> gate-truth fix, so its §8.4 and §8.5 describe the state *before* that fix. Both are
+> corrected in place below, marked `[CORRECTED 2026-11-13]`, rather than rewritten — the
+> argument still reads the way it was made, and the number next to it is the measured one.
+
 Scope: exactly the five blockers in `docs/REVIEW-FIXES.md` §d, nothing else. No `cargo`
 (`BASELINE.md` §1: the `rustc` on `PATH` belongs to a toolchain that does not provide one).
 No network. Nothing written inside `/home/kabui/project5/genenetwork4` — that tree was read
@@ -351,11 +357,26 @@ xapian` counts as "not run" for the five blockers: none of them touches the stub
    `--features xapian`, all passing", which is part of the same "the next reader trusts it"
    problem. It needs an owner decision (gate the second half on `#[cfg(not(feature =
    "xapian"))]`, or assert per backend).
+   **`[CORRECTED 2026-11-13]`** — the owner decision was the first option: the `crate::search`
+   half is now `#[cfg(not(feature = "xapian"))]` (`src/index/fixture.rs:394`), so this test
+   no longer fails under the feature. `cargo test --offline --features xapian` is **exit 0,
+   38 / 0** in `unittests src/lib.rs` and **88 / 0** over all targets, not red; the measured
+   per-target table is `docs/VERIFY-GATE-TRUTH.md` §1. The counts in
+   `docs/WORKER-CRATE.md:76-79` (27 default, 32 with `--features xapian`) are a *different*
+   stale claim from the same pass and are still stale — out of this correction's scope, which
+   covers the falsehood a reader meets first.
 5. **`README.md`'s expected test counts are stale** (it says 27 unit tests and 14 in
    `tests/grammar_render.rs`; the tree is now 32 and 24 — the 32 predates this pass, the 24
    does not). Left untouched to keep the diff to the five blockers; `docs/WORKER-CRATE.md`
    §4.3 also still carries the pre-F2 reading of `mean:5` (`point range 5..5`) and
    `mean:` (a 422), which this pass' B3/B4 work makes obsolete.
+   **`[CORRECTED 2026-11-13]`** — one of these two is still open and one is not. The README
+   counts are no longer hand-written: `README.md` §"Expected results of that gate" is now the
+   measured 8-target × 4-feature table (totals **84 / 84 / 88 / 88**, all `0 failed`), taken
+   from a real run on rustup's 1.88.0, so the 27/14 reading is gone. The `docs/WORKER-CRATE.md`
+   §4.3 reading of `mean:5` / `mean:` is **still stale** — that file was not corrected by the
+   gate-truth pass; `docs/CORPUS-RUNNER.md` §"What this runner cannot grade and why" and
+   `README.md` §"What is stubbed" are the current statement.
 6. **No `git` in this tree** (`git status` → "not a git repository"), so "no staged files"
    is trivially true and there is no VCS diff to show; the change set is the file list in
    §9.

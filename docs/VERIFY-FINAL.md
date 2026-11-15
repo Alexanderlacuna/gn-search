@@ -4,6 +4,13 @@ Verification complete. Report below.
 
 # VERIFY-FINAL — `gn-search`, verified by running
 
+> **SUPERSEDED 2026-11-13 — the xapian gate is green; see `docs/VERIFY-GATE-TRUTH.md`
+> section 1 for the measured table.** This review measured the tree *before* the gate-truth
+> fix, so §1's `--features xapian` result (exit 101, red in seven places) and the six
+> `grammar_render` reds it reports are the pre-fix state. The red numbers are kept below as
+> history and corrected in place, marked `[CORRECTED 2026-11-13]`, so the finding F1 that
+> drove the fix still reads.
+
 Reviewer: `reviewer-alt` (non-GLM family). Everything below was **executed on this machine**, not read.
 Toolchain: `~/.rustup/toolchains/1.88.0-x86_64-unknown-linux-gnu/bin/{cargo,rustc}` (cargo 1.88.0 / rustc 1.88.0),
 all runs `timeout 900 … cargo … --offline`. `--offline` is the only deviation from the literal command: the
@@ -34,6 +41,12 @@ its unit target is empty).
 
 `cargo test --offline --features xapian` → **exit 101, RED**:
 
+> **`[CORRECTED 2026-11-13]`** — this run measured the pre-fix tree. The same command on the
+> current tree is **exit 0**: `unittests src/lib.rs` **38 / 0**, `tests/parity_corpus.rs`
+> **7 / 0**, every other target unchanged, **88 / 0** in total, `--all-features` identical.
+> The pre-fix red table is kept as the record of what F1 below was about. Measured per-target
+> table: `docs/VERIFY-GATE-TRUTH.md` §1.
+
 | target | passed | failed |
 |---|---|---|
 | `unittests src/lib.rs` | 36 | **1** — `index::fixture::tests::a_non_empty_index_path_is_refused` |
@@ -41,6 +54,12 @@ its unit target is empty).
 
 `--all-features` (`serve,xapian`) with that one test gated in a scratch copy (`/tmp/gns_fix`) so the other
 targets could run:
+
+> **`[CORRECTED 2026-11-13]`** — the scratch copy is no longer needed: the `crate::search` half
+> of the failing test is `#[cfg(not(feature = "xapian"))]` in the delivered tree
+> (`src/index/fixture.rs:394`), the six `grammar_render` reds are gone (26 / 0 under the feature),
+> and `tests/parity_corpus.rs` is 7 / 0 because the two inventory-gated tests are compiled out
+> rather than failing. The table below is the pre-fix measurement.
 
 | target | passed | failed |
 |---|---|---|
@@ -53,6 +72,13 @@ targets could run:
 
 So the `xapian` feature build is red in **seven** places, not the one `docs/WORKER-BLOCKERS.md` §8.4 records and
 not the zero `README.md` claims. The six `grammar_render` reds are new information — see finding **F1**.
+
+**`[CORRECTED 2026-11-13]`** — both of those readings are now the opposite way round: the feature build is
+**green** (`88 / 0`, exit 0, all four columns measured), §8.4 and §8.5 of `WORKER-BLOCKERS.md` carry their own
+correction banners, and the `README.md` it called wrong is now the measured table. What survives the fix is the
+part that mattered: `88 / 0` under `--features xapian` is **less** evidence than the default `84 / 0` — 0
+match-set comparisons, the floor not applied (`README.md`, "Expected results of that gate";
+`docs/CORPUS-RUNNER.md`, "Under `--features xapian`").
 
 ## 2 · The corpus runner
 
