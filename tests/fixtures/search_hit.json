@@ -1,0 +1,31 @@
+{
+  "name": "17985",
+  "dataset": "BXDPublish",
+  "dataset_fullname": "BXD Published Phenotypes",
+  "group": "BXD",
+  "species": "mouse",
+  "authors": [
+    "Ye R",
+    "Carneiro AM",
+    "Airey D",
+    "Sanders-Bush E",
+    "Williams RW",
+    "Lu L",
+    "Wang J",
+    "Zhang B",
+    "Blakely RD"
+  ],
+  "year": 2014,
+  "description": "Central nervous system, neurochemistry: Midbrain 5-hydroxytryptamine (5-HT, serotonin) level in adult males [ng/mg protein]",
+  "mean": 12.037411717807545,
+  "additive": -1.3041285214285716,
+  "lrs": 11.999469156515026,
+  "lod": 2.6063138915106485,
+  "locus": "rsm10000012461",
+  "abbreviation": "5HT_MB_M",
+  "geno_chr": "16",
+  "geno_mb": 35.171449,
+  "inbredsetcode": "BXD",
+  "pubmed_id": 24102824,
+  "pubmed_link": "http://www.ncbi.nlm.nih.gov/entrez/query.fcgi?cmd=Retrieve&db=PubMed&list_uids=24102824&dopt=Abstract"
+}
