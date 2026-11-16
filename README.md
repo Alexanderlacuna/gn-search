@@ -85,15 +85,6 @@ gn-indexer incremental --index /srv/gn-index/current
 `delta` update in place under a lock. `<index>.sidecar.json` records the mode,
 document count and per-shard hashes.
 
-## Documentation
-
-```
-docs/LIMITS.md         what is not yet proven, and why
-docs/DECISIONS.md      the choices, with the alternatives rejected
-docs/CORPUS-RUNNER.md  how the 54 shapes are graded
-docs/KNOWN-DEBT.md     known lint debt
-```
-
 ## Licence
 
 AGPL-3.0-or-later, as GeneNetwork. The engine and indexer are derived from
