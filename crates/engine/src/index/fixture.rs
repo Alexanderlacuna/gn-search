@@ -46,9 +46,9 @@
 //! (SCOUT-NATIVE §4 lists no such fields; SCOUT-INDEXER §2 has the slots).
 
 use crate::grammar::{ParsedQuery, RenderedTerm, TermKind, GRAMMAR};
-use crate::hit::SearchHit;
 use crate::index::{offset_for_page, to_usize, Index};
-use crate::SearchError;
+use gn_search_schema::SearchError;
+use gn_search_schema::SearchHit;
 
 /// The recorded corpus's dataset label.
 const DATASET: &str = "C57BL-6JxC57BL-6NJF2Publish";

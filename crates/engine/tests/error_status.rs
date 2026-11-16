@@ -4,10 +4,10 @@
 //! GN4's route (`src/routes/search.rs::engine_error`), so it is mirrored
 //! here rather than exported by the crate: this file is a guard, not an
 //! API. Both functions below are exhaustive matches, which is the point —
-//! adding a variant to [`gn_search::SearchError`] stops compiling until
+//! adding a variant to [`gn_search_engine::SearchError`] stops compiling until
 //! somebody decides what status it means and what code it carries.
 
-use gn_search::SearchError;
+use gn_search_engine::SearchError;
 
 /// The status GN4 answers with for this error (SCOUT-NATIVE §6, the table
 /// in `src/search/mod.rs:62-68`).

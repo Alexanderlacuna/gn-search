@@ -59,8 +59,8 @@
 //! index that passes the file checks would still abort; gn3 crashes on
 //! such an index too, and no gate exercises it.
 
-use crate::error::SearchError;
-use crate::hit::SearchHit;
+use gn_search_schema::SearchError;
+use gn_search_schema::SearchHit;
 use std::sync::{Mutex, OnceLock};
 use xapian_rs::{
     Database, Enquire, FieldProcessor, NumberRangeProcessor, Operator, Query, QueryParser, Stem,

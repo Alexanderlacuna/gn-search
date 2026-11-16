@@ -1,12 +1,12 @@
 //! The renderer: query string in, index terms out.
 //!
 //! SCOUT section implemented: SCOUT-NATIVE §3 (the grammar), reached through
-//! the public [`gn_search::grammar`] API. The grammar's own tables are
+//! the public [`gn_search_engine::grammar`] API. The grammar's own tables are
 //! tested per prefix and per slot in `src/grammar.rs`; this file tests what
 //! a query actually becomes, which is what an index backend consumes.
 
-use gn_search::grammar::{RenderError, RenderedTerm, SyntaxFault, TermKind, GRAMMAR};
-use gn_search::SearchError;
+use gn_search_engine::grammar::{RenderError, RenderedTerm, SyntaxFault, TermKind, GRAMMAR};
+use gn_search_engine::SearchError;
 
 fn terms(q: &str) -> Vec<RenderedTerm> {
     GRAMMAR.render(q).expect("the query renders").terms
@@ -431,7 +431,7 @@ fn bad_numeric_bound_is_an_invalid_query() {
     assert_eq!(error.message(), "Unknown range operation");
     assert_eq!(error.xapian_error_type(), "QueryParserError");
 
-    match gn_search::search("", "mean:abc..def", "phenotype", 20, 1) {
+    match gn_search_engine::search("", "mean:abc..def", "phenotype", 20, 1) {
         Err(SearchError::InvalidQuery {
             message,
             xapian_error_type,
@@ -504,7 +504,7 @@ fn an_invalid_location_is_an_invalid_query() {
             "InvalidOperationError: Query is invalid (invalid Hs/Mm location field)"
         );
         assert_eq!(error.xapian_error_type(), "InvalidOperationError");
-        match gn_search::search("", q, "phenotype", 20, 1) {
+        match gn_search_engine::search("", q, "phenotype", 20, 1) {
             Err(SearchError::InvalidQuery {
                 message,
                 xapian_error_type,
@@ -539,7 +539,7 @@ fn a_dangling_operator_is_a_syntax_error() {
         assert_eq!(error.message(), "Syntax: <expression> AND <expression>");
         assert_eq!(error.xapian_error_type(), "QueryParserError");
     }
-    match gn_search::search("", "alcohol AND", "phenotype", 20, 1) {
+    match gn_search_engine::search("", "alcohol AND", "phenotype", 20, 1) {
         Err(SearchError::InvalidQuery { message, .. }) => {
             assert_eq!(message, "Syntax: <expression> AND <expression>");
         }
@@ -588,7 +588,7 @@ fn a_not_after_a_binary_operator_is_not_dangling() {
 ///
 /// This is the one renderer rule the moved engine does not share: xapian
 /// parses `alcohol "dependence` as a phrase whose close it supplies, so
-/// `gn_search::search` accepts it (measured after the move: it reaches the
+/// `gn_search_engine::search` accepts it (measured after the move: it reaches the
 /// index and fails as `Internal`, not `InvalidQuery`). The engine is
 /// authority, so this test pins the DOUBLE's rule and says so, rather than
 /// claiming a production class it does not have. No recorded shape carries an

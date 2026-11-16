@@ -1,0 +1,17 @@
+[package]
+name = "gn-search-schema"
+description = "What a GeneNetwork search document IS: the hit type, the error vocabulary, and the index manifest."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+utoipa = { workspace = true, optional = true }
+
+[features]
+default = []
+# `#[derive(utoipa::ToSchema)]` on `SearchHit`: GN4's `Envelope<T: ToSchema>`
+# makes this a type-formation requirement, so the consumer enables it.
+schema = ["dep:utoipa"]

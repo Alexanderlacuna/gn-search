@@ -53,8 +53,8 @@ mod serve {
     use std::net::{TcpListener, TcpStream};
     use std::thread;
 
-    use gn_search::manifest::{self, Manifest};
-    use gn_search::SearchError;
+    use gn_search_engine::manifest::{self, Manifest};
+    use gn_search_engine::SearchError;
     use serde::Serialize;
 
     /// The index directory, under the key GN4 reads (SCOUT-NATIVE §2).
@@ -194,7 +194,7 @@ mod serve {
             },
             None => 1,
         };
-        match gn_search::search(index_path, query, type_, limit, page) {
+        match gn_search_engine::search(index_path, query, type_, limit, page) {
             // The engine returns the whole match set from the page's offset
             // (`Index::search`); truncating to one page is the caller's job,
             // exactly as it is the route's on the production path.

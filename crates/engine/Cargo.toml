@@ -1,0 +1,24 @@
+[package]
+name = "gn-search-engine"
+description = "The GeneNetwork search engine: the xapian reader moved out of GN4."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+gn-search-schema.workspace = true
+xapian-rs.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["rt"] }
+
+[features]
+default = []
+# Forward the OpenAPI derive to the schema crate: GN4's `Envelope<T: ToSchema>`
+# makes it a type-formation requirement there, so the CONSUMER turns it on.
+schema = ["gn-search-schema/schema"]
+# The in-memory fixture index and the parity corpus runner's document set.
+# A TEST DOUBLE: off by default, because a build that answered a real index path
+# with its five recorded hits would fabricate search results.
+fixture = []
+# The development HTTP server in `src/bin/gn-search.rs`.
+serve = []

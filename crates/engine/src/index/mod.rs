@@ -21,8 +21,8 @@
 //! type keeps the fixture's construction out of a vtable.
 
 use crate::grammar::ParsedQuery;
-use crate::hit::SearchHit;
-use crate::SearchError;
+use gn_search_schema::SearchError;
+use gn_search_schema::SearchHit;
 
 #[cfg(feature = "fixture")]
 pub mod fixture;

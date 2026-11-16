@@ -13,7 +13,7 @@
 //! the recorded assertions in SCOUT-NATIVE §7) and the `lod` the route
 //! computes (`lrs / 4.604`). Nothing in it is invented.
 
-use gn_search::SearchHit;
+use gn_search_engine::SearchHit;
 
 const FIXTURE: &str = include_str!("fixtures/search_hit.json");
 

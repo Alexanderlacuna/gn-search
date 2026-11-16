@@ -6,7 +6,7 @@
 //! fixture double (`src/index/fixture.rs`) is what answers the match-set
 //! shapes, and no real xapian index is involved anywhere. The error
 //! classes, by contrast, are graded through the production entry point
-//! (`gn_search::search`), because the engine decides them before it opens
+//! (`gn_search_engine::search`), because the engine decides them before it opens
 //! an index.
 //!
 //! SCOUT sections implemented: SCOUT-NATIVE §3 (the grammar those shapes
@@ -58,9 +58,9 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use gn_search::grammar::{ParsedQuery, TermKind, GRAMMAR};
-use gn_search::index::fixture::FixtureIndex;
-use gn_search::{Index, SearchError, SearchHit};
+use gn_search_engine::grammar::{ParsedQuery, TermKind, GRAMMAR};
+use gn_search_engine::index::fixture::FixtureIndex;
+use gn_search_engine::{Index, SearchError, SearchHit};
 
 /// The corpus's own clause-(b) floor (GN4 `tests/search_parity.rs:64`).
 const JACCARD_FLOOR: f64 = 0.8;
@@ -400,7 +400,7 @@ fn fixture_blocker(shape: &Shape, parsed: &ParsedQuery) -> Option<String> {
 /// GN4's index carries no positions, so both classes parse and then match zero
 /// documents (`genenetwork4/docs/search-engines.md:98-102`; Q04, Q11 and Q12
 /// each recorded 0 hits). The renderer says "adjacent" with
-/// [`RenderedTerm::phrase`](gn_search::grammar::RenderedTerm::phrase); the
+/// [`RenderedTerm::phrase`](gn_search_engine::grammar::RenderedTerm::phrase); the
 /// fixture double can only AND, so these shapes are skipped BY NAME rather
 /// than graded or passed (DECISIONS rows 35, 36).
 fn is_phrase_shape(parsed: &ParsedQuery) -> bool {
@@ -639,7 +639,7 @@ fn grade(shape: &Shape, inventory: &BTreeSet<HitKey>) -> Row {
     // double instead: a real match set needs a real index, which this target
     // does not have. `limit = 0` is the unbounded fetch (`Index::search`).
     let searched = if shape.is_error() {
-        gn_search::search(FIXTURE_PATH, &shape.raw_query, &shape.type_, 0, 1)
+        gn_search_engine::search(FIXTURE_PATH, &shape.raw_query, &shape.type_, 0, 1)
     } else {
         fixture_search(&shape.raw_query, &shape.type_, 0, 1)
     };

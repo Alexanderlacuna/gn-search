@@ -9,8 +9,8 @@
 
 use std::path::{Path, PathBuf};
 
-use gn_search::manifest::{self, MANIFEST_VERSION_V3, MANIFEST_VERSION_V4};
-use gn_search::SearchError;
+use gn_search_engine::manifest::{self, MANIFEST_VERSION_V3, MANIFEST_VERSION_V4};
+use gn_search_engine::SearchError;
 
 /// A scratch index path (`<dir>/index`, so its sidecar is
 /// `<dir>/index.sidecar.json`), unique to this test.
@@ -28,7 +28,7 @@ fn write_sidecar(index_path: &Path, manifest_json: &str) {
     std::fs::write(&path, manifest_json).expect("write the sidecar");
 }
 
-fn read(index_path: &Path) -> Option<gn_search::manifest::Manifest> {
+fn read(index_path: &Path) -> Option<gn_search_engine::manifest::Manifest> {
     manifest::read(index_path.to_str().expect("utf-8 temp path"))
         .expect("reading a well-formed sidecar cannot fail")
 }

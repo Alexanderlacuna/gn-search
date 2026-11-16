@@ -57,19 +57,17 @@
 //! `XAPIAN_DB_PATH`, in exactly one place (`native::open_database`),
 //! so every caller of this crate sees the same misconfiguration class.
 
-pub mod error;
 pub mod grammar;
-pub mod hit;
 pub mod index;
-pub mod manifest;
 pub mod native;
 
-pub use error::SearchError;
+pub use gn_search_schema::manifest; // sidecar manifest: build_id · built_at · doc_count
+pub use gn_search_schema::SearchError;
+pub use gn_search_schema::SearchHit;
 pub use grammar::{
     Grammar, LocationShorthand, ParsedQuery, RenderError, RenderedTerm, StemStrategy, SyntaxFault,
     TermKind, GRAMMAR,
 };
-pub use hit::SearchHit;
 pub use index::Index;
 
 /// Run a search against the index at `index_path`.
