@@ -4,9 +4,8 @@ The GeneNetwork search engine and indexer, extracted from
 [genenetwork4](https://git.genenetwork.org/public/genenetwork4) so the search
 path can be built, tested and deployed independently.
 
-Status: the engine answers real queries against a real index, GN4 consumes it as
-a library, and the test suites pass. It is not yet a parity claim — see
-[`docs/LIMITS.md`](docs/LIMITS.md).
+Status: the engine answers real queries against a real index, and GN4 consumes it
+as a library.
 
 ## Crates
 
