@@ -24,22 +24,114 @@ one test calls `search_blocking` directly.
 
 ## How GN4 uses it
 
+GN4 does not import a search engine's internals. It links one crate, implements
+one trait it already had, and keeps every byte of its public contract.
+
 ```toml
+# genenetwork4/Cargo.toml — one line, no MySQL, no index writer, no web server
 gn-search-engine = { path = "../gn-search/crates/engine", features = ["schema"] }
 ```
 
+`features = ["schema"]` exists for one reason: GN4 wraps hits in
+`Envelope<T: Serialize + ToSchema>`, so `ToSchema` is a *type-formation*
+requirement there. The derive lives here, behind a feature, instead of an
+orphan impl in GN4 that Rust would refuse.
+
+The whole adapter is 77 lines. This is the part that matters:
+
 ```rust
+// genenetwork4/src/search/gnindex.rs
 use gn_search_engine::{search, SearchError, SearchHit};
 
-let hits = tokio::task::spawn_blocking(move || {
-    search(&index_path, q, type_, limit, page)   // synchronous xapian work
-}).await??;
+impl Engine for CrateEngine {
+    async fn search(&self, q: &str, type_: &str, limit: u64, page: u64)
+        -> Result<Vec<SearchHit>, SearchError>
+    {
+        let query = q.to_string();
+        let search_type = type_.to_string();
+        let index_path = self.index_path.clone();      // XAPIAN_DB_PATH, read per request
+
+        // xapian is synchronous C++ work: keep it off the async runtime's workers
+        // (the house pattern, cf. every spawn_blocking handler in GN4's routes).
+        tokio::task::spawn_blocking(move || {
+            search(&index_path, &query, &search_type, limit, page)
+        })
+        .await
+        .map_err(|e| SearchError::Internal(format!("crate search task failed to join: {e}")))?
+    }
+}
 ```
 
-GN4 keeps everything a consumer sees — the route, the envelope, `lod`,
-`locus`, sort, links, auth and OpenAPI — because all of that lives *above* the
-seam. `SEARCH_ENGINE=crate` selects this engine; `native` and `crate` are the
-same engine through the same code path, so they cannot diverge.
+Errors cross the seam by name, one arm per variant, so a rejection stays a
+rejection:
+
+```rust
+fn translate(error: SearchError) -> SearchError {
+    match error {
+        SearchError::InvalidQuery { message, xapian_error_type }
+            => SearchError::InvalidQuery { message, xapian_error_type },
+        SearchError::Unreachable(d)  => SearchError::Unreachable(d),   // index missing  -> 502
+        SearchError::Misbehaving(d)  => SearchError::Misbehaving(d),   // bad document   -> 502
+        SearchError::Backend(d)      => SearchError::Backend(d),       // backend fault  -> 502
+        SearchError::Internal(d)     => SearchError::Internal(d),      // misconfigured  -> 500
+    }
+}
+```
+
+Hits cross as JSON rather than by re-declaring the type, which is what keeps
+gn3's `pubmed_link` — a field GN4 has no name for — from being dropped:
+
+```rust
+fn to_route_hit(hit: SearchHit) -> Result<SearchHit, SearchError> {
+    let value = serde_json::to_value(hit)?;          // `extra` carries unknown keys
+    serde_json::from_value(value).map_err(...)       // routes' SearchHit, unchanged shape
+}
+```
+
+### The switch, and why the two names cannot diverge
+
+```
+SEARCH_ENGINE = forward | native | crate
+                forward   replay through gn3 (dies with gn3)
+                native    43 lines that call the same CrateEngine below
+                crate     CrateEngine -> gn-search-engine
+```
+
+`src/search/native.rs` was 1,003 lines; it is now 43 and contains no engine at
+all — it delegates to `CrateEngine`. So `SEARCH_ENGINE=native` and
+`SEARCH_ENGINE=crate` run the same code through the same seam. A rollback is one
+environment variable, and a rollback cannot silently test a different engine
+from the one you rolled back to.
+
+### What GN4 keeps, and will keep
+
+```
+the route            GET /search, param validation, `limit` default 20 and cap 100
+the envelope         data · meta · notes · next links
+derived values       lod = lrs / 4.604, locus / abbreviation enrichment
+sort and order       fetch 1,000, rank, truncate  (SORT_FETCH_LIMIT)
+the error contract   422 invalid_query with a typed body · 502 backend_* · 500 internal_error
+auth                 gnauth macro + AuthToken extractor; the crate neither checks nor carries a token
+OpenAPI              utoipa path + IntoParams + ToSchema, all in GN4
+```
+
+None of that moved, because the seam is *below* it. That is the point of the
+extraction: the engine can be replaced, scaled or restarted without a single
+consumer noticing.
+
+### Verified, not asserted
+
+```
+gn4 builds with the crate as a path dependency       BUILD_EXIT=0  (8m23s, guix shell)
+gn4's seam tests                                     3 passed
+   a_malformed_query_is_the_route_422_class
+   an_unset_index_path_is_a_named_misconfiguration
+   a_crate_hit_deserialises_into_the_route_hit_without_losing_keys
+gn4's own engine tests, on a real index               3 passed  (search_native · native_route · native_shapes)
+the HTTP route end to end                             GET /search?q=alcohol&type=phenotype&limit=3
+   access log: {"path":"/search","scheme":"jwt","status":200,"took_ms":917,"user":"crate-http-test"}
+   "route served 3 hit(s), first AXBXAPublish/10022"
+```
 
 ## Build and test
 
@@ -76,15 +168,87 @@ hashes.
 
 ## What is not proven
 
-- **Parity.** The recording was made against production; the index we have is a
-  47,040-document development build from the 2025-02 dump. Comparing the two
-  fails identically for the pre-move engine and this one, so the difference is
-  the corpus↔index pairing, not the code. Parity waits on the production index.
-- **No schema stamp.** Nothing records *what* a document means, so a writer and
-  a reader can disagree invisibly. A hashed schema version, written into the
-  index and checked on open, is the fix and is not built.
-- **No generation pointer.** Readers open a path, not a versioned generation, so
-  a rebuild cannot be rolled back by pointing at the previous one.
+Three gaps, each written as the failure it would cause rather than as a task.
+
+### 1 · Parity has not been claimed, because the corpus and the index are from different snapshots
+
+A parity claim means *for each of the 54 recorded shapes, this engine returns
+what the recording says it returned*. Running that needs two things from the
+same moment in time: the recorded answers, and an index those answers could have
+come from. We have one of each, and they are not the same moment.
+
+```
+the corpus     reduced-v1, 54 shapes, recorded against PRODUCTION genenetwork.org/api3 — 230,031 recorded hits in total
+the index      47,040 documents, built 2026-10-06/07 by gn3's indexer from the public 2025-02-18 dump ("~8 months behind the live database")
+```
+
+The mismatch is arithmetic, not opinion: shape Q02 (`insulin`, type `gene`)
+records **57,632 distinct (dataset, name) pairs** — more documents than the
+whole index contains. One query cannot return more documents than exist, so the
+recording cannot have come from this index.
+
+What that produces when you grade anyway:
+
+```
+39 shapes graded · 15 error-class or nothing-to-grade · 37 disagreed
+worst top-10 Jaccard 0.000 (Q02);  the shapes whose documents do overlap score Jaccard 1.000 (Q15, Q19, Q31, Q37)
+```
+
+And the decisive control: **the pre-move engine, on the same index, produces the
+identical table** — 39 graded, 37 disagreed, same worst shape. A defect introduced
+by the move would not reproduce in the code the move came from. So the divergence
+measures the corpus↔index pairing, not the extraction.
+
+What would make parity claimable: the production index the recording came from
+(the `ask #2` in the project's own notes), or a re-recording of the 54 shapes
+against this index — a documented re-baseline event, not a workaround.
+
+```sh
+# the run that produced the table above, with a real index and the crate engine
+XAPIAN_DB_PATH=/srv/gn-index/current SEARCH_ENGINE=crate   cargo test --offline --test parity_crate -- --nocapture
+```
+
+### 2 · Nothing records what a document *means*, so writer and reader can disagree in silence
+
+The index is bytes in a directory. Nothing in it says which prefixes, which value
+slots, or which term encoding the documents were written with — so an engine
+built today will happily read an index built by a writer from last month and
+return *a* result set that no one can check.
+
+That is exactly what tonight looked like from the outside: 37 of 39 shapes
+"failed" and neither side was wrong. There was no way to ask the index *what are
+you?* and get an answer. The fix is a schema stamp: a version number and a hash
+of the prefix/slot table written into the index at build time and compared on
+open, so a mismatch is `REFUSED[schema-mismatch]` naming both hashes instead of a
+silently different result set.
+
+Not built. `crates/schema` is where it belongs, because both the writer and the
+reader already depend on it — that is the one structural advantage of putting
+them in one workspace, and it is currently unused.
+
+### 3 · The index is a path, not a generation, so a rebuild cannot be rolled back
+
+Readers open whatever is at `XAPIAN_DB_PATH`. A `full` build writes to a sibling
+temp directory and swaps atomically, which protects against a *half-built* index —
+but there is no versioned generation behind a pointer, so:
+
+```
+· a bad build cannot be rolled back by pointing at the previous one
+· two indexes cannot be compared side by side (which is what a re-baseline needs)
+· `index_age` is not answerable: the sidecar has a document count and shard hashes, but no built_at,
+  so no response can say how old the answers are
+```
+
+What it should be:
+
+```
+/srv/gn-index/gen-<build_id>/       built by the indexer, complete before it is announced
+/srv/gn-index/current -> gen-...    replaced atomically; rollback is pointing it back
+manifest inside the generation      schema_hash · build_id · built_at · doc_count · source revision
+```
+
+Then readers are stateless and replicable, rollback is one symlink, and
+`index_age` becomes a fact in the response rather than folklore.
 
 ## Licence
 
