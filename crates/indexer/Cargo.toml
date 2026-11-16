@@ -1,0 +1,17 @@
+[package]
+name = "gn-search-indexer"
+description = "The xapian index writer: the crawl, the schema and the sidecar manifest moved out of GN4."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "gn-indexer"
+path = "src/bin/gn-indexer.rs"
+
+[dependencies]
+gn-search-schema.workspace = true
+xapian-rs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+mysql.workspace = true

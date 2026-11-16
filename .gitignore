@@ -1,5 +1,9 @@
 /target
-Cargo.lock.bak
-*.orig
-*.rej
-/tmp
+# Process artefacts (scouting, lane reports, adversarial reviews) stay local:
+# they are how the work was done, not what the crate is.
+/docs/SCOUT-*.md
+/docs/WORKER-*.md
+/docs/REVIEW-*.md
+/docs/VERIFY-*.md
+/docs/SYNTHESIS.md
+/docs/BASELINE.md

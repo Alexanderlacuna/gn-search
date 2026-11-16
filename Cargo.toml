@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/schema", "crates/engine"]
+members = ["crates/schema", "crates/engine", "crates/indexer"]
 resolver = "2"
 
 [workspace.package]
@@ -14,5 +14,6 @@ utoipa = "5"
 # The native search engine's xapian bindings: the Alexanderlacuna fork of
 # torrancew/xapian-rs, pinned to the rev carrying the full round-3 patch set
 # (checked parse, the NumberRangeProcessor f64 fix, SI-suffix positions).
+mysql = { version = "26.0.1", default-features = false, features = ["minimal-rust", "derive"] }
 xapian-rs = { git = "https://github.com/Alexanderlacuna/xapian-rs", rev = "70c5eace78dbca29c434cb103cb8b2c5d4246f0d" }
 gn-search-schema = { path = "crates/schema", version = "0.1.0" }
