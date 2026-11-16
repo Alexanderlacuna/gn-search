@@ -29,32 +29,14 @@ one trait it already had, and keeps every byte of its public contract.
 
 ```toml
 # genenetwork4/Cargo.toml — one line, no MySQL, no index writer, no web server
-gn-search-engine = { path = "../gn-search/crates/engine", features = ["schema"] }
+gn-search-engine = { git = "https://github.com/Alexanderlacuna/gn-search", rev = "<sha>", features = ["schema"] }
 ```
 
-**Path today, a pinned revision before this lands in GN4.** A path dependency is
-right while both repositories are being changed together: it needs no
-credentials, no vendoring step, and an edit on one side is visible immediately.
-It is wrong for anything reproducible, because it needs a sibling checkout at an
-*unknown* commit — GN4's CI would build whatever happens to be on disk.
-
-The three options, honestly:
-
-```
-path = "../gn-search/crates/engine"        co-development only; unreproducible, invisible to CI
-git = "...", rev = "<sha>"                 reproducible and cheap — but GN4 is PUBLIC and this
-                                           repository is PRIVATE, so every build needs credentials
-vendor into genenetwork4/vendor/gn-search  reproducible, no credentials, reviewable diffs, refreshed
-  at a pinned rev by a script              by a commit — the usual answer for a public repo consuming
-                                           a private one
-```
-
-My recommendation: use the path while both sides move, then either (a) publish
-`schema` and `engine` — they are AGPL, derived from GN4, and a published crate
-is the least surprising thing to do with code that is already being distributed
-inside GN4 — and pin a `rev`, or (b) vendor at a pinned rev if they stay private.
-What we should not do is leave a path dependency in a repository other people
-build.
+Pinned by revision, exactly as GN4 already consumes its xapian bindings
+(`xapian-rs = { git = "…/xapian-rs", rev = "70c5eace…" }`): one public
+repository, one commit, reproducible builds, no credentials, no sibling
+checkout. A `path` dependency is fine while both sides are being edited
+together, but a repository other people build must pin a revision.
 
 `features = ["schema"]` exists for one reason: GN4 wraps hits in
 `Envelope<T: Serialize + ToSchema>`, so `ToSchema` is a *type-formation*
