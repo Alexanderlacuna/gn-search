@@ -46,15 +46,34 @@ impl Engine for CrateEngine {
 }
 ```
 
-`SEARCH_ENGINE=native` and `SEARCH_ENGINE=crate` reach the same implementation, so
-the two names cannot diverge; rollback is one environment variable.
+## Engine names
+
+GN4 selects a search engine with one variable. There are three values, and an
+unrecognised one is refused by name rather than falling through to another
+engine.
+
+```
+SEARCH_ENGINE=crate      this crate: in-process xapian, opens XAPIAN_DB_PATH
+SEARCH_ENGINE=native     the former name for the same thing (the engine used to
+                         live in GN4); kept so existing deployments keep working
+SEARCH_ENGINE=forward    GN4's own gn3 proxy, an HTTP client — untouched by this
+                         crate, and deleted together with gn3
+anything else            500 internal_error naming the value it was given:
+                         SEARCH_ENGINE="cratee" is not an engine: expected
+                         "crate", "native" or "forward"
+```
+
+`forward` is the current default in GN4, so nothing changes for a deployment
+until it sets a value. The crate itself never speaks HTTP: it only opens a local
+index, which is why the proxy is not here.
 
 GN4 retains the route, envelope, `lod`, `locus`, sort/order, links, error
 mapping, authentication and OpenAPI. None of that is below the seam.
 
-Verified against GN4 (guix shell): library build 15m55s, 3 integration tests, 3
-engine tests on a 47,040-document index, and `GET /search` returning 200 with
-real hits.
+Verified against GN4 (guix shell): the library builds, four seam/route tests
+pass (including the refusal of an unknown engine name), three of GN4's own
+engine tests pass against a 47,040-document index, and `GET /search` returns 200
+with real hits.
 
 ## Build and test
 
