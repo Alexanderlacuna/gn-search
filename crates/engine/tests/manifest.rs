@@ -183,3 +183,64 @@ fn sidecar_path_trims_a_trailing_slash() {
         "/var/genenetwork/xapian.sidecar.json"
     );
 }
+
+// ── the schema stamp ─────────────────────────────────────────────────────────
+//
+// A build stamps the schema it wrote; a reader refuses a different one. These
+// tests exercise the reader's half without needing a xapian database: the check
+// runs before any index is opened.
+
+fn scratch(tag: &str) -> std::path::PathBuf {
+    let mut p = std::env::temp_dir();
+    p.push(format!("gn-search-schema-{}-{}", std::process::id(), tag));
+    let _ = std::fs::remove_dir_all(&p);
+    std::fs::create_dir_all(&p).unwrap();
+    p
+}
+
+fn stamped_index(dir: &std::path::Path, hash: Option<&str>) -> String {
+    let index = dir.join("idx");
+    std::fs::create_dir_all(&index).unwrap();
+    let manifest = serde_json::json!({
+        "version": 3,
+        "mode": "full",
+        "doc_count": 5,
+        "rif_hash": "aa",
+        "wiki_hash": "bb",
+        "shards": {},
+        "schema_version": 1,
+        "schema_hash": hash,
+    });
+    std::fs::write(format!("{}.sidecar.json", index.display()), manifest.to_string()).unwrap();
+    index.display().to_string()
+}
+
+#[test]
+fn a_matching_stamp_is_accepted() {
+    let dir = scratch("match");
+    let ours = gn_search_schema::schema_digest();
+    let index = stamped_index(&dir, Some(&ours));
+    // The check is what we are testing: a matching stamp must not refuse.
+    let error = gn_search_engine::native::check_schema(&index);
+    assert!(error.is_ok(), "a matching stamp is accepted: {error:?}");
+}
+
+#[test]
+fn a_different_stamp_is_refused_by_name() {
+    let dir = scratch("mismatch");
+    let index = stamped_index(&dir, Some("0000deadbeef"));
+    let message = format!("{:?}", gn_search_engine::native::check_schema(&index).unwrap_err());
+    assert!(message.contains("schema-mismatch"), "names the class: {message}");
+    assert!(message.contains("0000deadbeef"), "names the index's digest: {message}");
+    assert!(message.contains(&gn_search_schema::schema_digest()), "names ours: {message}");
+}
+
+#[test]
+fn an_unstamped_index_is_not_refused() {
+    let dir = scratch("unstamped");
+    let index = stamped_index(&dir, None);
+    assert!(
+        gn_search_engine::native::check_schema(&index).is_ok(),
+        "an index built before the stamp must still serve"
+    );
+}

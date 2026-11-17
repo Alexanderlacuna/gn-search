@@ -82,6 +82,16 @@ pub struct Manifest {
     pub rif_hash: String,
     /// Monolithic wiki cache hash at the time of writing.
     pub wiki_hash: String,
+    /// The schema this index was written with (prefixes, terms, slots), and the
+    /// digest of that table. A reader compares it before it answers.
+    /// `None` only for a manifest written before the stamp existed.
+    #[serde(default)]
+    pub schema_version: Option<u32>,
+    #[serde(default)]
+    pub schema_hash: Option<String>,
+    /// When this manifest was finalised, so a reader can report the index's age.
+    #[serde(default)]
+    pub built_at: Option<String>,
     /// DB `NOW(6)` of the run whose results were committed (the delta
     /// coverage point, format `YYYY-MM-DD HH:MM:SS.ffffff`). `None` when
     /// system versioning was absent at the time of the run.
@@ -519,6 +529,9 @@ mod tests {
             doc_count: 1,
             rif_hash: "aa".to_string(),
             wiki_hash: "bb".to_string(),
+              schema_version: Some(gn_search_schema::SCHEMA_VERSION),
+              schema_hash: Some(gn_search_schema::schema_digest()),
+              built_at: Some("2026-11-16T12:00:00Z".to_string()),
             versioning_marker: Some("2026-10-13 19:37:47.469634".to_string()),
             versioning_flavour: Some("timestamp6".to_string()),
             shards: BTreeMap::new(),

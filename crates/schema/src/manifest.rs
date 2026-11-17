@@ -66,6 +66,14 @@ pub struct Manifest {
     pub rif_hash: String,
     /// Wiki dictionary hash at the time of writing.
     pub wiki_hash: String,
+    /// The schema the index was written with, and the digest of its table.
+    ///
+    /// Absent on indexes built before the stamp existed; a reader must treat
+    /// "absent" as "unknown", not as "matches".
+    #[serde(default)]
+    pub schema_version: Option<u32>,
+    #[serde(default)]
+    pub schema_hash: Option<String>,
     /// DB `NOW(6)` coverage point of the run (the delta path's watermark,
     /// not a build time; SCOUT-INDEXER §5, §8).
     #[serde(default)]

@@ -533,7 +533,37 @@ pub(crate) fn search_blocking(
 /// an error). The file checks cover the misconfiguration classes an
 /// operator can actually hit; see the module doc for the corrupt-index
 /// residual.
+/// Refuse an index whose schema this engine does not implement.
+///
+/// The writer stamps the schema version and the digest of its table into the
+/// sidecar. Without the check, a reader queries a differently-encoded index and
+/// returns numbers from the wrong slot — no error, just a wrong answer.
+pub fn check_schema(path: &str) -> Result<(), SearchError> {
+    let manifest = match gn_search_schema::read_manifest(path) {
+        Ok(Some(manifest)) => manifest,
+        // No sidecar at all: an index built before the stamp existed. Say so and
+        // carry on, because refusing would break every index already on disk.
+        Ok(None) => return Ok(()),
+        // A sidecar we cannot read is a different problem: the caller's own
+        // manifest reader decides what that means.
+        Err(_) => return Ok(()),
+    };
+    let (Some(version), Some(hash)) = (manifest.schema_version, manifest.schema_hash.clone()) else {
+        return Ok(());
+    };
+    let ours = gn_search_schema::schema_digest();
+    if hash != ours {
+        return Err(SearchError::Internal(format!(
+            "schema-mismatch: index at {path} was written with schema v{version} ({hash}), this engine \
+             implements schema v{} ({ours}); rebuild the index or run a reader that implements it",
+            gn_search_schema::SCHEMA_VERSION
+        )));
+    }
+    Ok(())
+}
+
 fn open_database(path: &str) -> Result<Database, SearchError> {
+    check_schema(path)?;
     if path.is_empty() {
         return Err(SearchError::Internal(
             "XAPIAN_DB_PATH is not configured; set it to the xapian index directory to \
