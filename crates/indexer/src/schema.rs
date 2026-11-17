@@ -1,96 +1,33 @@
-//! The index schema shared by the writer (this module tree) and the
-//! native reader (`crate::search::native`).
+//! The index schema — now declared once, in `gn-search-schema`.
 //!
-//! Writer and reader compile against the same constants, so
-//! writer/reader drift is a compile error rather than a search bug:
-//! the identity-term shape, the document-type terms, the prefixed
-//! field terms and the numeric value slots are defined once here.
+//! The writer and the reader both depend on that crate, so the prefixes, the
+//! document-type terms and the numeric value slots have one definition site
+//! instead of two hand-kept copies. This module re-exports it so the writer's
+//! call sites read the same as they always did.
 
-/// Document type for expression (ProbeSet) records; the type term is
-/// `XTgene` (`write_document`, index-genenetwork).
-pub const DOCTYPE_GENE: &str = "gene";
-/// Document type for published phenotype records; the type term is
-/// `XTphenotype`.
-pub const DOCTYPE_PHENOTYPE: &str = "phenotype";
-
-/// Prefixed term prefixes, exactly the set the indexer emits
-/// (`index_species`..`index_peakchr`, `index_from_dictionary`).
-pub mod prefix {
-    /// Authors (indexed WITH positions, wdf increment 0).
-    pub const AUTHOR: &str = "A";
-    /// Species (boolean, no positions).
-    pub const SPECIES: &str = "XS";
-    /// Group (boolean, no positions).
-    pub const GROUP: &str = "XG";
-    /// Tissue (WITH positions, wdf increment 0).
-    pub const TISSUE: &str = "XI";
-    /// Dataset (WITH positions, wdf increment 0).
-    pub const DATASET: &str = "XDS";
-    /// Symbol (boolean, no positions).
-    pub const SYMBOL: &str = "XY";
-    /// Chromosome (boolean, no positions).
-    pub const CHR: &str = "XC";
-    /// Peak chromosome (boolean, no positions).
-    pub const PEAK_CHR: &str = "XPC";
-    /// RIF dictionary text (no positions, wdf increment 0).
-    pub const RIF: &str = "XRF";
-    /// Wiki dictionary text (no positions, wdf increment 0).
-    pub const WIKI: &str = "XWK";
-}
-
-/// Numeric value slots (`add_mean`..`add_nsamples`).
-pub mod slot {
-    /// Trait mean (`add_mean`).
-    pub const MEAN: u32 = 0;
-    /// Peak / LRS (`add_peak`).
-    pub const PEAK: u32 = 1;
-    /// Position in megabases (`add_mb`).
-    pub const POSITION: u32 = 2;
-    /// Peak position in megabases (`add_peakmb`).
-    pub const PEAK_MB: u32 = 3;
-    /// Additive effect (`add_additive`).
-    pub const ADDITIVE: u32 = 4;
-    /// Publication year (`add_year`).
-    pub const YEAR: u32 = 5;
-    /// Number of samples (`add_nsamples`).
-    pub const NSAMPLES: u32 = 6;
-}
-
-/// The document-type term `XT<doctype>` written by `write_document`.
-pub fn type_term(doctype: &str) -> String {
-    format!("XT{doctype}")
-}
-
-/// The stable identity term `Q<doctype>:<name>:<dataset>` (the whole
-/// `name:dataset` identifier lowercased), matching `write_document` in
-/// the Python indexer.
-pub fn identity_term(doctype: &str, name: &str, dataset: &str) -> String {
-    format!(
-        "Q{}:{}",
-        doctype,
-        format!("{name}:{dataset}").to_lowercase()
-    )
-}
+pub use gn_search_schema::schema::*;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
+    /// The digest is stable: the same table always renders to the same string.
     #[test]
-    fn identity_term_is_lowercased_with_dataset() {
+    fn canonical_rendering_is_deterministic() {
         assert_eq!(
-            identity_term(DOCTYPE_PHENOTYPE, "10583", "BXDPublish"),
-            "Qphenotype:10583:bxdpublish"
-        );
-        assert_eq!(
-            identity_term(DOCTYPE_GENE, "100001_at", "HC_U_0304_R"),
-            "Qgene:100001_at:hc_u_0304_r"
+            gn_search_schema::canonical_schema(),
+            gn_search_schema::canonical_schema()
         );
     }
 
+    /// Every prefix and slot a document is written with appears in the digest,
+    /// so a change to any of them changes the stamp.
     #[test]
-    fn type_term_matches_reference() {
-        assert_eq!(type_term(DOCTYPE_GENE), "XTgene");
-        assert_eq!(type_term(DOCTYPE_PHENOTYPE), "XTphenotype");
+    fn the_digest_covers_prefixes_and_slots() {
+        let text = gn_search_schema::canonical_schema();
+        for needle in [
+            "prefix species=XS", "prefix dataset=XDS", "prefix symbol=XY", "prefix chr=XC",
+            "prefix peakchr=XPC", "slot mean=0", "slot position=2", "slot nsamples=6",
+        ] {
+            assert!(text.contains(needle), "canonical() is missing {needle:?}:\n{text}");
+        }
     }
 }

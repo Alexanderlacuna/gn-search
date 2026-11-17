@@ -7,9 +7,12 @@
 //! compile time.
 
 pub mod error;
+pub mod schema;
+pub mod sha256;
 pub mod hit;
 pub mod manifest;
 
 pub use error::SearchError;
+pub use schema::{canonical as canonical_schema, digest as schema_digest, SCHEMA_VERSION};
 pub use hit::SearchHit;
 pub use manifest::{age_seconds, read as read_manifest, sidecar_path, Manifest, ShardEntry};

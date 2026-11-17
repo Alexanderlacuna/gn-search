@@ -463,7 +463,7 @@ fn drain_label(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::indexer::delta;
+    use crate::delta;
 
     /// The stream order must match the byte order `merge_streams` compares
     /// with. The `Name` columns are `utf8mb4_general_ci`; without the

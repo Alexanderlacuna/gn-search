@@ -60,6 +60,7 @@
 //! such an index too, and no gate exercises it.
 
 use gn_search_schema::SearchError;
+use gn_search_schema::schema;
 use gn_search_schema::SearchHit;
 use std::sync::{Mutex, OnceLock};
 use xapian_rs::{
@@ -132,25 +133,25 @@ fn build_query_parser() -> QueryParser {
     // (search.py:204-209); this does it for all of them, which changes
     // no graded parity shape (they all already use lowercase values).
     for (field, prefix) in [
-        ("author", "A"),
-        ("species", "XS"),
-        ("group", "XG"),
-        ("tissue", "XI"),
-        ("dataset", "XDS"),
-        ("symbol", "XY"),
-        ("chr", "XC"),
-        ("peakchr", "XPC"),
+        ("author", schema::prefix::AUTHOR),
+        ("species", schema::prefix::SPECIES),
+        ("group", schema::prefix::GROUP),
+        ("tissue", schema::prefix::TISSUE),
+        ("dataset", schema::prefix::DATASET),
+        ("symbol", schema::prefix::SYMBOL),
+        ("chr", schema::prefix::CHR),
+        ("peakchr", schema::prefix::PEAK_CHR),
     ] {
         qp.add_custom_boolean_prefix::<_, &str>(field, LowercaseProcessor { prefix }, None);
     }
     // Probabilistic prefixes (search.py:229-233): weighted (BM25-scored)
     // text fields, freely mixable with free text and operators; rif and
     // wiki also answer to their uppercase aliases (search.py:232-233).
-    qp.add_prefix::<&str>("description", Some("XD"));
-    qp.add_prefix::<&str>("rif", Some("XRF"));
-    qp.add_prefix::<&str>("wiki", Some("XWK"));
-    qp.add_prefix::<&str>("RIF", Some("XRF"));
-    qp.add_prefix::<&str>("WIKI", Some("XWK"));
+    qp.add_prefix::<&str>("description", Some(schema::prefix::DESCRIPTION));
+    qp.add_prefix::<&str>("rif", Some(schema::prefix::RIF));
+    qp.add_prefix::<&str>("wiki", Some(schema::prefix::WIKI));
+    qp.add_prefix::<&str>("RIF", Some(schema::prefix::RIF));
+    qp.add_prefix::<&str>("WIKI", Some(schema::prefix::WIKI));
     // Numeric range processors (search.py:234-243; C3.4). The fork's
     // NumberRangeProcessor parses bounds as f64 (the 2673115 fix) and
     // its bridge maps empty sides onto gn3's one-sided VALUE_LE /
