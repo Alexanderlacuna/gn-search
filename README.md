@@ -128,10 +128,22 @@ XAPIAN_DB_PATH="$XAPIAN_DB_PATH" cargo run --features serve --bin gn-search
 curl 'http://127.0.0.1:7641/search?query=alcohol&type=phenotype&limit=3'
 ```
 
+## Changing the schema
+
+The table is edited in one place — `crates/schema/src/schema.rs`:
+
+```
+add a field in an unused slot      keep SCHEMA_VERSION, extend the table; readers ignore what they do not know
+change what an entry MEANS         bump SCHEMA_VERSION, rebuild the index; readers that implement the old
+                                   version refuse the new index by name instead of answering from the wrong slot
+then                               rebuild: `gn-indexer full --index …` writes the new digest into the sidecar
+```
+
 ## The schema, briefly
 
 A document's meaning is a set of term prefixes and numeric value slots, defined
-once in `crates/indexer/src/schema.rs` and queried by `crates/engine`:
+once in `crates/schema/src/schema.rs` and compiled by both `crates/indexer` (which
+writes them) and `crates/engine` (which queries them):
 
 ```
 prefix   XS species · XG group · XI tissue · XDS dataset · XY symbol · XC chromosome ·
@@ -140,11 +152,19 @@ terms    XT<type>  (XTgene, XTphenotype)      Q<doctype>:<name>:<dataset>  (a do
 slots    0 mean · 1 peak/LRS · 2 position (Mb) · 3 peak position (Mb) · 4 additive · 5 year · 6 n_samples
 ```
 
-Writer and reader must agree on that layout, and today nothing enforces it: the
-index carries no version or hash of the schema, so a reader can query an index
-written by a different layout and get a plausible, wrong answer. Stamping a
-schema hash into the sidecar and checking it on open is the fix, and it is not
-built yet.
+Writer and reader must agree on that layout. Two things enforce it:
+
+```
+one table       prefixes, terms and slots are declared once in gn-search-schema, which
+                both crates depend on — disagreement is a compile error, not a search bug
+one stamp       a build writes schema_version and the digest of that table into the sidecar;
+                an engine compares it before opening the database:
+                  schema-mismatch: index was written with schema v1 (9f2a…), this engine
+                  implements schema v1 (0c77…) — rebuild the index or update the reader
+```
+
+An index built before the stamp is treated as *unknown*, not as a match, so
+existing indexes keep serving.
 
 ## Licence
 
