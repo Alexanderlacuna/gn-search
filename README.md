@@ -91,17 +91,60 @@ The corpus runner grades 54 recorded shapes from
 `genenetwork4/test/data/parity-fixtures`; anything it cannot grade is reported
 `SKIP` with a reason.
 
-Index builds:
+## Index builds
+
+The indexer writes a glass database from the GeneNetwork MySQL dump. It reads
+three things from the environment and nothing else:
 
 ```sh
-gn-indexer full        --index /srv/gn-index/gen-$(date -u +%Y%m%dT%H%M)   # SQL_URI required
-gn-indexer delta       --index /srv/gn-index/current
-gn-indexer incremental --index /srv/gn-index/current
+export SQL_URI='mysql://user:password@host/db_webqtl'          # where the data is
+export XAPIAN_DB_PATH=/srv/gn-index/gen-$(date -u +%Y%m%dT%H%M)   # where the index goes
+export GN4_RDF_CACHE=/tmp/gn4-rdf-cache.json                   # RIF + wiki dictionaries (optional)
 ```
 
-`full` builds into a sibling directory and swaps atomically; `incremental` and
-`delta` update in place under a lock. `<index>.sidecar.json` records the mode,
-document count and per-shard hashes.
+A complete build, then refreshes:
+
+```sh
+# full: builds into $XAPIAN_DB_PATH, commits in chunks, swaps atomically when done
+gn-indexer full --index "$XAPIAN_DB_PATH"
+
+# afterwards, under a lock, in place
+gn-indexer delta        --index "$XAPIAN_DB_PATH"   # system-versioning window: only changed datasets
+gn-indexer incremental  --index "$XAPIAN_DB_PATH"   # full crawl, per-document hash diff
+```
+
+What a build leaves behind, and how to read it back:
+
+```sh
+ls "$XAPIAN_DB_PATH"                      # iamglass · postlist.glass · termlist.glass · position.glass · docdata.glass · flintlock
+cat "$XAPIAN_DB_PATH".sidecar.json        # mode · doc_count · rif_hash · wiki_hash · per-shard {file, count, content_sha256}
+xapian-delve "$XAPIAN_DB_PATH"            # "number of documents = …" — the coarse check
+```
+
+Then point an engine at it and ask a question — the same index serves both:
+
+```sh
+XAPIAN_DB_PATH="$XAPIAN_DB_PATH" cargo run --features serve --bin gn-search
+curl 'http://127.0.0.1:7641/search?query=alcohol&type=phenotype&limit=3'
+```
+
+## The schema, briefly
+
+A document's meaning is a set of term prefixes and numeric value slots, defined
+once in `crates/indexer/src/schema.rs` and queried by `crates/engine`:
+
+```
+prefix   XS species · XG group · XI tissue · XDS dataset · XY symbol · XC chromosome ·
+         XPC peak chromosome · A authors · XRF RIF dictionary · XWK wiki
+terms    XT<type>  (XTgene, XTphenotype)      Q<doctype>:<name>:<dataset>  (a document's stable identity)
+slots    0 mean · 1 peak/LRS · 2 position (Mb) · 3 peak position (Mb) · 4 additive · 5 year · 6 n_samples
+```
+
+Writer and reader must agree on that layout, and today nothing enforces it: the
+index carries no version or hash of the schema, so a reader can query an index
+written by a different layout and get a plausible, wrong answer. Stamping a
+schema hash into the sidecar and checking it on open is the fix, and it is not
+built yet.
 
 ## Licence
 
